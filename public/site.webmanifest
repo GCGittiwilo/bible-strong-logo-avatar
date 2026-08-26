@@ -1,0 +1,19 @@
+{
+  "name": "Bible Strong Logo Avatar",
+  "short_name": "Logo Avatar",
+  "description": "An expressive procedural Bible Strong mascot for AI chat and voice interfaces.",
+  "lang": "en",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#171a1e",
+  "theme_color": "#171a1e",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

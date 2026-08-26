@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Bible Strong Logo Avatar">
+  <title>Bible Strong Logo Avatar</title>
+  <rect width="120" height="120" rx="26" fill="#f8f9fb"/>
+  <g fill="none" stroke="#08090a" stroke-width="10" stroke-linecap="square" stroke-linejoin="miter">
+    <path d="M42 14H14v31M78 14h28v31M14 75v31h40M78 106h28V75"/>
+    <path d="M36 34l48 52M84 34L34 86"/>
+    <path d="M18 60h22M80 60h22"/>
+  </g>
+</svg>

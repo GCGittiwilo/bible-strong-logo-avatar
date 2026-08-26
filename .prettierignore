@@ -1,0 +1,11 @@
+dist/
+node_modules/
+legacy/
+LICENSE
+public/favicon.svg
+public/robots.txt
+public/sitemap.xml
+src/features/studio/defaultStudioDocument.json
+src/features/export/standaloneEngine.generated.ts
+standalone/
+pnpm-lock.yaml
