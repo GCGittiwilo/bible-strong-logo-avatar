@@ -28,9 +28,9 @@ const faviconData = `data:image/svg+xml;base64,${Buffer.from(favicon).toString('
 html = html
   .replace(
     scriptMatch[0],
-    `<script type="module">${script.replaceAll('</script', '<\\/script')}</script>`
+    () => `<script type="module">${script.replaceAll('</script', '<\\/script')}</script>`
   )
-  .replace(styleMatch[0], `<style>${stylesheet.replaceAll('</style', '<\\/style')}</style>`)
+  .replace(styleMatch[0], () => `<style>${stylesheet.replaceAll('</style', '<\\/style')}</style>`)
   .replace('./favicon.svg', faviconData)
   .replace(/\s*<link rel="apple-touch-icon"[^>]*>/, '')
   .replace(/\s*<link rel="manifest"[^>]*>/, '')
