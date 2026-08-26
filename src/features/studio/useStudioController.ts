@@ -36,6 +36,7 @@ import {
   getSequenceSpring,
   readSequenceClock,
   remapSequencesAfterExpressionDelete,
+  resolveSequenceFaceForward,
   type AvatarSequence,
   type SequenceStep,
 } from '@/features/animation/sequences'
@@ -160,6 +161,7 @@ export function useStudioController() {
   const [talking, setTalking] = useState(false)
   const [thinking, setThinking] = useState(false)
   const [faceRevealed, setFaceRevealed] = useState(!initialAvatar.logoMorph)
+  const [activeFaceForward, setActiveFaceForward] = useState(Boolean(initialAvatar.faceForward))
   const faceReveal = useMotionValue(initialAvatar.logoMorph ? 0 : 1)
   const faceRevealAnimation = useRef<ReturnType<typeof animate> | null>(null)
   const initialStatePlayback = initialDocument.playback
@@ -263,6 +265,7 @@ export function useStudioController() {
   const stateDragPreview = useRef(sequences)
   const [draggingStateId, setDraggingStateId] = useState<string | null>(null)
   const activeAvatarIdRef = useRef(activeAvatarId)
+  const activeFaceForwardRef = useRef(Boolean(initialAvatar.faceForward))
   const surfaceRef = useRef(surface)
   const bodyNodesRef = useRef(bodyNodes)
   const showWireRef = useRef(showWire)
@@ -356,6 +359,15 @@ export function useStudioController() {
   const bodyColorAnimation = useRef<ReturnType<typeof animate> | null>(null)
   const eyeColorAnimation = useRef<ReturnType<typeof animate> | null>(null)
 
+  const updateActiveFaceForward = (next: boolean) => {
+    if (activeFaceForwardRef.current === next) return
+    activeFaceForwardRef.current = next
+    setActiveFaceForward(next)
+    eyeAmbientStartedAt.current = -1
+    lastEyeAmbientElapsed.current = 0
+    eyeAmbientSignature.current = 'none'
+  }
+
   const paintPose = (
     pose: AvatarPose,
     blink?: number,
@@ -368,7 +380,8 @@ export function useStudioController() {
     lastAmbientStrength.current = resolvedAmbientStrength
     paintRenderedRotationGizmo(renderedRotationGizmo, pose.expression)
     const avatar = avatarsRef.current.find(item => item.id === activeAvatarIdRef.current)
-    const eyeExpression = avatar?.faceForward
+    const faceForward = activeFaceForwardRef.current
+    const eyeExpression = faceForward
       ? { ...independentFaceExpression, eyeMotion: pose.expression.eyeMotion }
       : pose.expression
     const eyeAmbientEnabled = !reduceMotion && eyeExpression.eyeMotion !== 'none'
@@ -377,7 +390,7 @@ export function useStudioController() {
     const bodySignature = bodyAmbientEnabled ? pose.expression.bodyMotion : 'none'
     if (eyeSignature !== eyeAmbientSignature.current) {
       eyeAmbientSignature.current = eyeSignature
-      if (!avatar?.faceForward) {
+      if (!faceForward) {
         eyeAmbientStartedAt.current = -1
         lastEyeAmbientElapsed.current = 0
       }
@@ -406,7 +419,7 @@ export function useStudioController() {
       ? ambientEyeOffset(
           eyeExpression,
           lastEyeAmbientElapsed.current,
-          avatar?.faceForward ? 1 : resolvedAmbientStrength
+          faceForward ? 1 : resolvedAmbientStrength
         )
       : { x: 0, y: 0 }
     const renderPose = avatar
@@ -417,7 +430,7 @@ export function useStudioController() {
       bodyNodes: bodyNodesRef.current,
       eyeOffset,
       mouth: avatar?.mouth,
-      faceForward: avatar?.faceForward,
+      faceForward,
       mouthPose: talking
         ? comicTalkingMouthPoseAt(
             (frameTimeMs ?? performance.now()) - talkingStartedAt.current,
@@ -867,6 +880,7 @@ export function useStudioController() {
     const nextSequences = nextBehavior.sequences
     stopTransition(true)
     activeAvatarIdRef.current = id
+    updateActiveFaceForward(Boolean(avatar.faceForward))
     surfaceRef.current = avatar.body.primary
     bodyNodesRef.current = avatar.body.nodes
     setActiveAvatarId(id)
@@ -1104,6 +1118,8 @@ export function useStudioController() {
     blinkControls.current?.stop()
     blinkAnimating.current = false
     blinkValue.jump(1)
+    const avatar = avatarsRef.current.find(item => item.id === activeAvatarIdRef.current)
+    updateActiveFaceForward(Boolean(avatar?.faceForward))
     paintPose(displayedPose.current, 1)
     setStatePlaying(false)
     setPlaybackStatus('stopped')
@@ -1117,9 +1133,13 @@ export function useStudioController() {
       stopState(persist)
       return
     }
+    const playbackAvatar =
+      avatarsRef.current.find(item => item.id === activeAvatarIdRef.current) ?? activeAvatar
     setTalking(false)
     setThinking(false)
-    if (activeAvatar.logoMorph) setLogoFace(sequence.presentation !== 'logo')
+    if (playbackAvatar.logoMorph) setLogoFace(sequence.presentation !== 'logo')
+    updateActiveFaceForward(resolveSequenceFaceForward(playbackAvatar.faceForward, sequence))
+    paintPose(displayedPose.current)
     const id = sequence.id
     playbackTimeline.current = beginPlayback(playbackTimeline.current, resume)
     setSelectedState(id)
@@ -1161,6 +1181,8 @@ export function useStudioController() {
         if (blinkTimer.current) clearTimeout(blinkTimer.current)
         blinkTimer.current = null
         playbackTimeline.current = { ...playbackTimeline.current, blinkDueAt: null }
+        updateActiveFaceForward(Boolean(playbackAvatar.faceForward))
+        paintPose(displayedPose.current)
         setStatePlaying(false)
         setPlaybackStatus('stopped')
         setPlaybackVisual(current => ({ ...current, position: null }))
@@ -1242,6 +1264,8 @@ export function useStudioController() {
     activeSequenceRef.current = sequence
     setSelectedState(sequence.id)
     setActiveState(sequence.id)
+    const playbackAvatar = avatarsRef.current.find(item => item.id === activeAvatarIdRef.current)
+    updateActiveFaceForward(resolveSequenceFaceForward(playbackAvatar?.faceForward, sequence))
     if (snapshot.playing) {
       launchSequence(sequence, true, false)
       return
@@ -1257,6 +1281,7 @@ export function useStudioController() {
     if (sequence && initialStatePlayback.stateId !== null) {
       activeSequenceRef.current = sequence
       setActiveState(sequence.id)
+      updateActiveFaceForward(resolveSequenceFaceForward(initialAvatar.faceForward, sequence))
       if (initialStatePlayback.playing) launchSequence(sequence, false, false)
       else setPlaybackStatus('paused')
     }
@@ -1812,6 +1837,7 @@ export function useStudioController() {
     activeAvatar,
     activeAvatarEyes,
     activeAvatarId,
+    activeFaceForward,
     activeExpression,
     activeSequence,
     activeSequenceLabel,

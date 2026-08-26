@@ -11,6 +11,7 @@ import type { Expression } from '../avatar/geometry'
 export type SequencePlaybackMode = 'loop' | 'once' | 'pingPong'
 export type SequenceTransition = 'spring' | 'smooth' | 'snappy'
 export type SequencePresentation = 'face' | 'logo'
+export type SequenceFaceMode = 'locked' | 'attached'
 export type SequenceEffect =
   | 'listening'
   | 'transcribing'
@@ -44,6 +45,7 @@ export type AvatarSequence = {
   description: string
   builtIn: boolean
   presentation?: SequencePresentation
+  faceMode?: SequenceFaceMode
   effect?: SequenceEffect
   playbackMode: SequencePlaybackMode
   steps: SequenceStep[]
@@ -59,6 +61,7 @@ export type SequenceCursor = {
 const playbackModes: SequencePlaybackMode[] = ['loop', 'once', 'pingPong']
 const transitions: SequenceTransition[] = ['spring', 'smooth', 'snappy']
 const presentations: SequencePresentation[] = ['face', 'logo']
+const faceModes: SequenceFaceMode[] = ['locked', 'attached']
 const effects: SequenceEffect[] = [
   'listening',
   'transcribing',
@@ -97,6 +100,7 @@ export const createInitialSequences = (): AvatarSequence[] =>
           stateNotes[id] ?? 'Cette animation enchaîne un pool de presets et des clignements.',
         builtIn: true,
         presentation: 'face',
+        faceMode: 'locked',
         ...((stateEffects as Partial<Record<string, SequenceEffect>>)[id]
           ? { effect: (stateEffects as Partial<Record<string, SequenceEffect>>)[id] }
           : {}),
@@ -162,6 +166,11 @@ const parseSequence = (value: unknown, fallback: AvatarSequence): AvatarSequence
       : fallback.presentation
         ? { presentation: fallback.presentation }
         : {}),
+    ...(faceModes.includes(candidate?.faceMode as SequenceFaceMode)
+      ? { faceMode: candidate?.faceMode as SequenceFaceMode }
+      : fallback.faceMode
+        ? { faceMode: fallback.faceMode }
+        : {}),
     ...(effects.includes(candidate?.effect as SequenceEffect)
       ? { effect: candidate?.effect as SequenceEffect }
       : fallback.effect
@@ -220,6 +229,11 @@ export const normalizeSequencesForExpressions = (
 export const findExpressionIndex = (expressions: Expression[], expressionId: string) =>
   expressions.findIndex(expression => expression.id === expressionId)
 
+export const resolveSequenceFaceForward = (
+  avatarFaceForward: boolean | undefined,
+  sequence?: Pick<AvatarSequence, 'faceMode'> | null
+) => Boolean(avatarFaceForward && sequence?.faceMode !== 'attached')
+
 export const readSequenceClock = () => performance.now()
 
 export const groupSequences = (sequences: AvatarSequence[]) => {
@@ -244,6 +258,7 @@ export const createSequence = (expressionId = initialExpressions[0].id): AvatarS
   description: '',
   builtIn: false,
   presentation: 'face',
+  faceMode: 'locked',
   playbackMode: 'loop',
   steps: [
     {

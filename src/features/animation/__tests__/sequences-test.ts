@@ -5,6 +5,7 @@ import {
   normalizeSequencesForExpressions,
   parseSequences,
   remapSequencesAfterExpressionDelete,
+  resolveSequenceFaceForward,
 } from '@/features/animation/sequences'
 import { initialExpressions } from '@/features/avatar/presets'
 
@@ -113,5 +114,23 @@ describe('editable avatar sequences', () => {
     ])
     expect(sequences.find(sequence => sequence.id === 'thinking')?.effect).toBe('thinking')
     expect(new Set(sequences.map(sequence => sequence.group))).toEqual(new Set(['Chat Pipeline']))
+  })
+
+  it('lets each animation choose whether the face stays locked or follows the body', () => {
+    expect(resolveSequenceFaceForward(true, { faceMode: 'locked' })).toBe(true)
+    expect(resolveSequenceFaceForward(true, { faceMode: 'attached' })).toBe(false)
+    expect(resolveSequenceFaceForward(false, { faceMode: 'locked' })).toBe(false)
+  })
+
+  it('preserves a valid face behavior when loading saved animations', () => {
+    const [sequence] = parseSequences([
+      {
+        ...createInitialSequences()[0],
+        id: 'attached-spin',
+        faceMode: 'attached',
+      },
+    ])
+
+    expect(sequence.faceMode).toBe('attached')
   })
 })

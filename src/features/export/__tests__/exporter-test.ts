@@ -40,6 +40,7 @@ describe('avatar export', () => {
     expect(payload.avatar.mouth?.style).toBe('comic')
     expect(payload.animations.listening.effect).toBe('listening')
     expect(payload.animations.listening.presentation).toBe('face')
+    expect(payload.animations.listening.faceMode).toBe('locked')
   })
 
   it('preserves face-locking in reusable exports', () => {
@@ -50,6 +51,18 @@ describe('avatar export', () => {
     )
 
     expect(faceLocked.avatar.faceForward).toBe(true)
+  })
+
+  it('preserves attached-face animation behavior in reusable exports', () => {
+    const attachedAnimation = { ...animations[0], id: 'attached', faceMode: 'attached' as const }
+    const attached = createAvatarExportPayload(
+      { ...avatar, faceForward: true },
+      initialExpressions,
+      [attachedAnimation]
+    )
+
+    expect(attached.animations.attached.faceMode).toBe('attached')
+    expect(generateJavaScriptAvatarModule(attached)).toContain("faceMode !== 'attached'")
   })
 
   it('generates a standalone JavaScript module without a Web Component', () => {

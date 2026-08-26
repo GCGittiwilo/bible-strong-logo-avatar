@@ -194,7 +194,19 @@ const spinExpression = (id: string, headX: number, headY: number, headZ: number)
 
 const spinExpressions = [
   spinExpression('logo-spin-rest', 0, 0, 0),
-  ...[90, 180, 270].map(angle => spinExpression(`logo-spin-y-${angle}`, 0, angle, 0)),
+  ...[90, 180, 270].flatMap(angle => [
+    spinExpression(`logo-spin-x-${angle}`, angle, 0, 0),
+    spinExpression(`logo-spin-y-${angle}`, 0, angle, 0),
+    spinExpression(`logo-spin-z-${angle}`, 0, 0, angle),
+  ]),
+  spinExpression('logo-spin-diagonal-1', 48, 52, 20),
+  spinExpression('logo-spin-diagonal-2', -52, 128, 62),
+  spinExpression('logo-spin-diagonal-3', 44, 214, 138),
+  spinExpression('logo-spin-diagonal-4', -36, 302, 242),
+  spinExpression('logo-spin-gyro-1', 34, 38, 16),
+  spinExpression('logo-spin-gyro-2', -48, 112, 78),
+  spinExpression('logo-spin-gyro-3', 62, 202, 158),
+  spinExpression('logo-spin-gyro-4', -42, 292, 262),
 ]
 
 const spinBlink = {
@@ -209,33 +221,86 @@ const spinSequence = (
   id: string,
   name: string,
   expressionIds: string[],
-  transitionMs = 420,
-  transition: AvatarSequence['steps'][number]['transition'] = 'smooth'
+  group: 'Face Locked Spins' | 'Face Attached Spins' | 'Loading',
+  faceMode: AvatarSequence['faceMode'],
+  options: {
+    presentation?: AvatarSequence['presentation']
+    transitionMs?: number
+    transition?: AvatarSequence['steps'][number]['transition']
+  } = {}
 ): AvatarSequence => ({
   id,
   name,
-  group: 'Loading',
-  description: 'The intact Bible Strong logo spins while the chatbot is loading.',
+  group,
+  description:
+    group === 'Face Attached Spins'
+      ? 'The eyes rotate with the logo frame as one connected character.'
+      : group === 'Face Locked Spins'
+        ? 'The logo frame spins independently while the eyes keep facing the user.'
+        : 'The intact Bible Strong logo spins while the chatbot is loading.',
   builtIn: true,
-  presentation: 'logo',
+  presentation: options.presentation ?? 'face',
+  faceMode,
   playbackMode: 'loop',
   steps: expressionIds.map((expressionId, index) => ({
     id: `${id}-step-${index}`,
     expressionId,
-    holdMs: transition === 'snappy' ? 140 : 100,
-    transitionMs,
-    transition,
+    holdMs: options.transition === 'snappy' ? 140 : 90,
+    transitionMs: options.transitionMs ?? 420,
+    transition: options.transition ?? 'smooth',
   })),
   blink: { ...spinBlink },
 })
 
+const axisSequence = (axis: 'x' | 'y' | 'z') => [
+  'logo-spin-rest',
+  ...[90, 180, 270].map(angle => `logo-spin-${axis}-${angle}`),
+]
+const diagonalSequence = [
+  'logo-spin-rest',
+  'logo-spin-diagonal-1',
+  'logo-spin-diagonal-2',
+  'logo-spin-diagonal-3',
+  'logo-spin-diagonal-4',
+]
+const gyroscopeSequence = [
+  'logo-spin-rest',
+  'logo-spin-gyro-1',
+  'logo-spin-gyro-2',
+  'logo-spin-gyro-3',
+  'logo-spin-gyro-4',
+]
+
+const spinFamily = (
+  prefix: 'face-locked' | 'face-attached',
+  group: 'Face Locked Spins' | 'Face Attached Spins',
+  faceMode: NonNullable<AvatarSequence['faceMode']>
+) => [
+  spinSequence(`${prefix}-horizontal-360`, 'Horizontal 360', axisSequence('y'), group, faceMode, {
+    transitionMs: 360,
+  }),
+  spinSequence(`${prefix}-vertical-360`, 'Vertical 360', axisSequence('x'), group, faceMode, {
+    transitionMs: 360,
+  }),
+  spinSequence(`${prefix}-roll-360`, 'Roll 360', axisSequence('z'), group, faceMode, {
+    transitionMs: 340,
+  }),
+  spinSequence(`${prefix}-diagonal-orbit`, 'Diagonal Orbit', diagonalSequence, group, faceMode, {
+    transitionMs: 390,
+  }),
+  spinSequence(`${prefix}-gyroscope`, 'Gyroscope', gyroscopeSequence, group, faceMode, {
+    transitionMs: 320,
+    transition: 'snappy',
+  }),
+]
+
 const spinSequences = [
-  spinSequence(
-    'loading',
-    'loading',
-    ['logo-spin-rest', 'logo-spin-y-90', 'logo-spin-y-180', 'logo-spin-y-270'],
-    360
-  ),
+  ...spinFamily('face-locked', 'Face Locked Spins', 'locked'),
+  ...spinFamily('face-attached', 'Face Attached Spins', 'attached'),
+  spinSequence('loading', 'loading', axisSequence('y'), 'Loading', 'locked', {
+    presentation: 'logo',
+    transitionMs: 360,
+  }),
 ]
 
 export const resolveAvatarBehavior = (

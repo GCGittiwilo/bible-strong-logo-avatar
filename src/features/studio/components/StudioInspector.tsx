@@ -49,7 +49,11 @@ import {
 import { ColorField, LinkButton, NumericField } from '@/app/components/controls'
 import { formatSeconds, scaleSurface, type Side, type SnapshotFormat } from '@/app/studio-utils'
 import { SequenceWorkspace } from '@/features/animation/components/SequenceWorkspace'
-import { findExpressionIndex, groupSequences } from '@/features/animation/sequences'
+import {
+  findExpressionIndex,
+  groupSequences,
+  resolveSequenceFaceForward,
+} from '@/features/animation/sequences'
 import { defaultAvatarEyes } from '@/features/avatar/avatars'
 import { bodyPrimitiveTypes, MAX_BODY_NODES } from '@/features/avatar/body'
 import {
@@ -1467,6 +1471,8 @@ export function StudioInspector({ controller }: { controller: StudioController }
                                 className="expression-card state-card"
                                 variant="outline"
                                 type="button"
+                                data-sequence-id={sequence.id}
+                                data-face-mode={sequence.faceMode ?? 'locked'}
                                 draggable
                                 aria-pressed={selectedState === sequence.id}
                                 onDragStart={event => {
@@ -1500,7 +1506,10 @@ export function StudioInspector({ controller }: { controller: StudioController }
                                   colors={activeAvatar.colors}
                                   avatarEyes={activeAvatarEyes}
                                   logoMorph={activeAvatar.logoMorph}
-                                  faceForward={activeAvatar.faceForward}
+                                  faceForward={resolveSequenceFaceForward(
+                                    activeAvatar.faceForward,
+                                    sequence
+                                  )}
                                   showLogo={sequence.presentation === 'logo'}
                                   effect={sequence.effect}
                                   id={`state-card-${sequence.id}`}

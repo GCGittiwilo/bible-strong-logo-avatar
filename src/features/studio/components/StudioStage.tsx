@@ -14,6 +14,7 @@ export function StudioStage({ controller }: { controller: StudioController }) {
   const {
     activeAvatarEyes,
     activeAvatar,
+    activeFaceForward,
     activeSequenceLabel,
     activeStatusEffect,
     bodyEditing,
@@ -77,7 +78,7 @@ export function StudioStage({ controller }: { controller: StudioController }) {
         avatarEyes={activeAvatarEyes}
         mouth={activeAvatar.mouth}
         logoMorph={activeAvatar.logoMorph}
-        faceForward={activeAvatar.faceForward}
+        faceForward={activeFaceForward}
         faceReveal={faceReveal}
         statusEffect={activeStatusEffect}
         surface={surface}

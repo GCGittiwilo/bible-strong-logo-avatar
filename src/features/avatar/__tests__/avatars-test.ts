@@ -176,18 +176,35 @@ describe('avatar behavior revisions', () => {
     expect(result.avatars[0].mouthRevision).toBe(1)
   })
 
-  it('adds one dedicated logo-only loading animation to the shared library', () => {
+  it('adds paired face-locked and face-attached spin libraries plus logo loading', () => {
     const behavior = resolveAvatarBehavior(
       { ...createAvatar('Bible Strong Spins'), spinAnimations: true, faceForward: true },
       base
     )
 
-    expect(behavior.expressions).toHaveLength(base.expressions.length + 4)
-    expect(behavior.sequences).toHaveLength(base.sequences.length + 1)
+    expect(behavior.expressions).toHaveLength(base.expressions.length + 18)
+    expect(behavior.sequences).toHaveLength(base.sequences.length + 11)
+    expect(
+      behavior.sequences.filter(sequence => sequence.group === 'Face Locked Spins')
+    ).toHaveLength(5)
+    expect(
+      behavior.sequences.filter(sequence => sequence.group === 'Face Attached Spins')
+    ).toHaveLength(5)
+    expect(
+      behavior.sequences
+        .filter(sequence => sequence.group === 'Face Locked Spins')
+        .every(sequence => sequence.faceMode === 'locked')
+    ).toBe(true)
+    expect(
+      behavior.sequences
+        .filter(sequence => sequence.group === 'Face Attached Spins')
+        .every(sequence => sequence.faceMode === 'attached')
+    ).toBe(true)
     expect(behavior.sequences.at(-1)).toMatchObject({
       id: 'loading',
       group: 'Loading',
       presentation: 'logo',
+      faceMode: 'locked',
     })
   })
 

@@ -26,6 +26,7 @@ import { NumericField } from '@/app/components/controls'
 import {
   createSequenceStep,
   findExpressionIndex,
+  resolveSequenceFaceForward,
   type AvatarSequence,
   type SequenceStep,
 } from '@/features/animation/sequences'
@@ -175,8 +176,10 @@ export function SequenceWorkspace({
               <Select
                 value={editing.draft.group}
                 items={[
-                  { value: 'Cycle de vie', label: t('Cycle de vie') },
-                  { value: 'Réactions', label: t('Réactions') },
+                  { value: 'Chat Pipeline', label: t('Chat Pipeline') },
+                  { value: 'Face Locked Spins', label: t('Face Locked Spins') },
+                  { value: 'Face Attached Spins', label: t('Face Attached Spins') },
+                  { value: 'Loading', label: t('Loading') },
                   { value: 'Custom', label: t('Custom') },
                 ]}
                 onValueChange={value => value && onChange({ ...editing.draft, group: value })}
@@ -185,8 +188,10 @@ export function SequenceWorkspace({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Cycle de vie">{t('Cycle de vie')}</SelectItem>
-                  <SelectItem value="Réactions">{t('Réactions')}</SelectItem>
+                  <SelectItem value="Chat Pipeline">{t('Chat Pipeline')}</SelectItem>
+                  <SelectItem value="Face Locked Spins">{t('Face Locked Spins')}</SelectItem>
+                  <SelectItem value="Face Attached Spins">{t('Face Attached Spins')}</SelectItem>
+                  <SelectItem value="Loading">{t('Loading')}</SelectItem>
                   <SelectItem value="Custom">{t('Custom')}</SelectItem>
                 </SelectContent>
               </Select>
@@ -227,6 +232,31 @@ export function SequenceWorkspace({
                 </SelectContent>
               </Select>
             </Field>
+            <Field>
+              <FieldTitle>{t('Comportement du visage')}</FieldTitle>
+              <Select
+                value={editing.draft.faceMode ?? 'locked'}
+                items={[
+                  { value: 'locked', label: t('Visage verrouillé') },
+                  { value: 'attached', label: t('Visage attaché au corps') },
+                ]}
+                onValueChange={value =>
+                  value &&
+                  onChange({
+                    ...editing.draft,
+                    faceMode: value as AvatarSequence['faceMode'],
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="locked">{t('Visage verrouillé')}</SelectItem>
+                  <SelectItem value="attached">{t('Visage attaché au corps')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
           </InspectorCard>
         </ControlSection>
 
@@ -261,7 +291,7 @@ export function SequenceWorkspace({
                         colors={colors}
                         avatarEyes={avatarEyes}
                         logoMorph={logoMorph}
-                        faceForward={faceForward}
+                        faceForward={resolveSequenceFaceForward(faceForward, editing.draft)}
                         showLogo={editing.draft.presentation === 'logo'}
                         effect={editing.draft.effect}
                         id={`sequence-${editing.draft.id}-${step.id}`}
@@ -402,7 +432,7 @@ export function SequenceWorkspace({
                     colors={colors}
                     avatarEyes={avatarEyes}
                     logoMorph={logoMorph}
-                    faceForward={faceForward}
+                    faceForward={resolveSequenceFaceForward(faceForward, editing.draft)}
                     id={`sequence-library-${index}`}
                   />
                   <span>{String(index).padStart(2, '0')}</span>

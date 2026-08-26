@@ -76,7 +76,6 @@ function mountAvatar(target, options = {}) {
   const thoughtBubbleLayout = [[34, 29, 3], [25, 19, 5], [0, -6, 18]];
   const thoughtBubbles = thoughtBubbleLayout.map(() => svgElement('circle'));
   const thoughtDots = [-8, 0, 8].map(() => svgElement('circle'));
-  if (!DATA.avatar.faceForward) eyesLayer.setAttribute('clip-path', 'url(#' + clipId + ')');
   eyesLayer.append(leftEye, rightEye, mouth, tongue);
   thoughtLayer.append(...thoughtBubbles, ...thoughtDots);
   motionLayer.append(backLayer, head, eyesLayer, frontLayer);
@@ -99,6 +98,14 @@ function mountAvatar(target, options = {}) {
     });
   };
   let currentAnimation = options.animation && DATA.animations[options.animation] ? options.animation : animationNames[0];
+  const faceForwardForAnimation = () => Boolean(
+    DATA.avatar.faceForward && DATA.animations[currentAnimation]?.faceMode !== 'attached'
+  );
+  const syncFaceClip = () => {
+    if (faceForwardForAnimation()) eyesLayer.removeAttribute('clip-path');
+    else eyesLayer.setAttribute('clip-path', 'url(#' + clipId + ')');
+  };
+  syncFaceClip();
   const initialStep = DATA.animations[currentAnimation].steps[0];
   const initialExpression = DATA.expressions[initialStep.expressionId];
   let currentPose = AvatarProceduralEngine.poseFromExpression(initialExpression);
@@ -140,7 +147,7 @@ function mountAvatar(target, options = {}) {
     const now = performance.now();
     if (expression.eyeMotion !== eyeAmbientSignature) {
       eyeAmbientSignature = expression.eyeMotion;
-      if (!DATA.avatar.faceForward) eyeAmbientStartedAt = now;
+      if (!faceForwardForAnimation()) eyeAmbientStartedAt = now;
     }
     if (expression.bodyMotion !== bodyAmbientSignature) {
       bodyAmbientSignature = expression.bodyMotion;
@@ -165,13 +172,14 @@ function mountAvatar(target, options = {}) {
     const expression = currentPose.expression.bodyMotion !== 'none'
       ? AvatarProceduralEngine.applyAmbientBodyMotion(currentPose.expression, bodyElapsed, ambientStrength)
       : currentPose.expression;
-    const eyeMotionExpression = DATA.avatar.faceForward
+    const faceForward = faceForwardForAnimation();
+    const eyeMotionExpression = faceForward
       ? { ...faceMotionExpression, eyeMotion: currentPose.expression.eyeMotion }
       : currentPose.expression;
     const eyeOffset = AvatarProceduralEngine.ambientEyeOffset(
       eyeMotionExpression,
       eyeElapsed,
-      DATA.avatar.faceForward ? 1 : ambientStrength
+      faceForward ? 1 : ambientStrength
     );
     const renderedPose = AvatarProceduralEngine.poseFromExpression(expression);
     const geometry = AvatarProceduralEngine.renderAvatar(renderedPose, DATA.avatar.surface, blinkAmount, {
@@ -179,7 +187,7 @@ function mountAvatar(target, options = {}) {
       bodyNodes: DATA.avatar.bodyNodes,
       eyeOffset,
       mouth: DATA.avatar.mouth,
-      faceForward: DATA.avatar.faceForward,
+      faceForward,
       mouthPose: talking
         ? AvatarProceduralEngine.comicTalkingMouthPoseAt(time - talkingStartedAt, reducedMotion)
         : thinking
@@ -398,6 +406,7 @@ function mountAvatar(target, options = {}) {
         return api;
       }
       currentAnimation = animationName;
+      syncFaceClip();
       const animation = DATA.animations[currentAnimation];
       if (animation.presentation === 'logo') api.setFace(false);
       else if (animation.presentation === 'face') api.setFace(true);
