@@ -4,7 +4,9 @@ An open-source, procedural SVG mascot by [GCGittiwilo](https://github.com/GCGitt
 
 ## Open it without commands
 
-Download [`DOUBLE-CLICK TO OPEN - LOGO AVATAR.html`](./standalone/DOUBLE-CLICK%20TO%20OPEN%20-%20LOGO%20AVATAR.html), then double-click the downloaded file. It is a self-contained build with the interface, avatar, expressions, and animations bundled into one HTML file.
+[**Open the avatar in your browser**](https://gcgittiwilo.github.io/bible-strong-logo-avatar/)
+
+For an offline copy, download [`DOUBLE-CLICK TO OPEN - LOGO AVATAR.html`](./standalone/DOUBLE-CLICK%20TO%20OPEN%20-%20LOGO%20AVATAR.html), then double-click the downloaded file. It is a self-contained build with the interface, avatar, expressions, and animations bundled into one HTML file.
 
 ## Chatbot animation set
 

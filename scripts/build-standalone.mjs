@@ -6,6 +6,7 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const distDirectory = path.join(root, 'dist')
 const outputDirectory = path.join(root, 'standalone')
 const outputPath = path.join(outputDirectory, 'DOUBLE-CLICK TO OPEN - LOGO AVATAR.html')
+const pagesOutputPath = path.join(root, 'docs', 'index.html')
 
 let html = await fs.readFile(path.join(distDirectory, 'index.html'), 'utf8')
 
@@ -34,7 +35,12 @@ html = html
   .replace(/\s*<link rel="apple-touch-icon"[^>]*>/, '')
   .replace(/\s*<link rel="manifest"[^>]*>/, '')
 
-await fs.mkdir(outputDirectory, { recursive: true })
-await fs.writeFile(outputPath, html)
+await Promise.all([
+  fs.mkdir(outputDirectory, { recursive: true }),
+  fs.mkdir(path.dirname(pagesOutputPath), { recursive: true }),
+])
+await Promise.all([fs.writeFile(outputPath, html), fs.writeFile(pagesOutputPath, html)])
 
-console.log(`Created ${path.relative(root, outputPath)} (${Buffer.byteLength(html)} bytes)`)
+console.log(
+  `Created ${path.relative(root, outputPath)} and ${path.relative(root, pagesOutputPath)} (${Buffer.byteLength(html)} bytes each)`
+)

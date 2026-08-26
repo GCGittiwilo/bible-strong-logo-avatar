@@ -8,4 +8,5 @@ public/sitemap.xml
 src/features/studio/defaultStudioDocument.json
 src/features/export/standaloneEngine.generated.ts
 standalone/
+docs/index.html
 pnpm-lock.yaml
