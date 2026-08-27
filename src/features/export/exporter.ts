@@ -77,7 +77,8 @@ export const createAvatarExportPayload = (
   const animations = Object.fromEntries(
     selectedAnimations.map(animation => {
       const key = animationKey(animation, usedKeys)
-      const gazeProfile = resolveSequenceGazeProfile(animation)
+      const gazeProfile =
+        animation.gazeProfile === 'none' ? 'none' : resolveSequenceGazeProfile(animation)
       return [
         key,
         {

@@ -503,9 +503,13 @@ export function useStudioController() {
     })
     paintRenderedScene(renderedScene, geometry)
     paintRenderedLogoMorph(renderedScene, avatar?.logoMorph, faceReveal.get())
-    const ambientOffset = bodyAmbientEnabled
+    const proceduralOffset = bodyAmbientEnabled
       ? ambientBodyOffset(pose.expression, lastBodyAmbientElapsed.current, resolvedAmbientStrength)
       : { x: 0, y: 0 }
+    const ambientOffset = {
+      x: pose.expression.stageX + proceduralOffset.x,
+      y: pose.expression.stageY + proceduralOffset.y,
+    }
     const bridge = sequenceOffsetBridge.current
     let renderedOffset = ambientOffset
     if (bridge) {
@@ -709,8 +713,10 @@ export function useStudioController() {
       stopTransition(true)
       stopColorTransitions()
       const durationMs = transitionSettings.transitionMs
-      lastAmbientStrength.current = 0
       const from = { ...current }
+      const preserveAmbientMotion =
+        from.bodyMotion === next.bodyMotion && from.eyeMotion === next.eyeMotion
+      lastAmbientStrength.current = preserveAmbientMotion ? 1 : 0
       const fromColors = {
         body: renderedColors.body.get(),
         eyes: renderedColors.eyes.get(),
@@ -749,7 +755,12 @@ export function useStudioController() {
           body: interpolateHexColor(fromColors.body, targetColors.body, bounded(eased, 0, 1)),
           eyes: interpolateHexColor(fromColors.eyes, targetColors.eyes, bounded(eased, 0, 1)),
         })
-        paintPose(poseFromExpression(animated), undefined, time, bounded(eased, 0, 1))
+        paintPose(
+          poseFromExpression(animated),
+          undefined,
+          time,
+          preserveAmbientMotion ? 1 : bounded(eased, 0, 1)
+        )
         if (
           modeRef.current === 'manual' &&
           time - lastInspectorFrame.current >= INSPECTOR_FRAME_MS

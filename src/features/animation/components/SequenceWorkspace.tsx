@@ -263,6 +263,7 @@ export function SequenceWorkspace({
               <Select
                 value={editing.draft.gazeProfile ?? 'attentive'}
                 items={[
+                  { value: 'none', label: t('Aucun') },
                   { value: 'calm', label: t('Calme') },
                   { value: 'attentive', label: t('Attentif') },
                   { value: 'reflective', label: t('Réfléchi') },
@@ -285,6 +286,7 @@ export function SequenceWorkspace({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="none">{t('Aucun')}</SelectItem>
                   <SelectItem value="calm">{t('Calme')}</SelectItem>
                   <SelectItem value="attentive">{t('Attentif')}</SelectItem>
                   <SelectItem value="reflective">{t('Réfléchi')}</SelectItem>

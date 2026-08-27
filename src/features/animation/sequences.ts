@@ -13,6 +13,7 @@ export type SequencePlaybackMode = 'loop' | 'once' | 'pingPong'
 export type SequenceTransition = 'spring' | 'smooth' | 'snappy' | 'linear'
 export type SequencePresentation = 'face' | 'logo'
 export type SequenceFaceMode = 'locked' | 'attached'
+export type SequenceGazeProfile = GazeProfile | 'none'
 export type SequenceEffect =
   | 'listening'
   | 'transcribing'
@@ -47,7 +48,7 @@ export type AvatarSequence = {
   builtIn: boolean
   presentation?: SequencePresentation
   faceMode?: SequenceFaceMode
-  gazeProfile?: GazeProfile
+  gazeProfile?: SequenceGazeProfile
   effect?: SequenceEffect
   playbackMode: SequencePlaybackMode
   steps: SequenceStep[]
@@ -64,6 +65,7 @@ const playbackModes: SequencePlaybackMode[] = ['loop', 'once', 'pingPong']
 const transitions: SequenceTransition[] = ['spring', 'smooth', 'snappy', 'linear']
 const presentations: SequencePresentation[] = ['face', 'logo']
 const faceModes: SequenceFaceMode[] = ['locked', 'attached']
+const sequenceGazeProfiles: SequenceGazeProfile[] = [...gazeProfiles, 'none']
 const effects: SequenceEffect[] = [
   'listening',
   'transcribing',
@@ -186,8 +188,8 @@ const parseSequence = (value: unknown, fallback: AvatarSequence): AvatarSequence
       : fallback.faceMode
         ? { faceMode: fallback.faceMode }
         : {}),
-    ...(gazeProfiles.includes(candidate?.gazeProfile as GazeProfile)
-      ? { gazeProfile: candidate?.gazeProfile as GazeProfile }
+    ...(sequenceGazeProfiles.includes(candidate?.gazeProfile as SequenceGazeProfile)
+      ? { gazeProfile: candidate?.gazeProfile as SequenceGazeProfile }
       : fallback.gazeProfile
         ? { gazeProfile: fallback.gazeProfile }
         : {}),
@@ -258,6 +260,7 @@ export const resolveSequenceGazeProfile = (
   sequence?: Pick<AvatarSequence, 'id' | 'presentation' | 'effect' | 'gazeProfile'> | null
 ): GazeProfile | null => {
   if (!sequence || sequence.presentation === 'logo') return null
+  if (sequence.gazeProfile === 'none') return null
   if (sequence.gazeProfile) return sequence.gazeProfile
   if (stateGazeProfiles[sequence.id]) return stateGazeProfiles[sequence.id]
   if (sequence.effect === 'thinking') return 'reflective'

@@ -15,13 +15,16 @@ const normalizePoint3 = ([x, y, z]: Point3): Point3 => {
   return [x / length, y / length, z / length]
 }
 export type EyeMotion = 'none' | 'microSaccades' | 'shake'
-export type BodyMotion = 'none' | 'slowDrift' | 'shake' | 'bounce' | 'laugh' | 'sob'
+export type BodyMotion = 'none' | 'slowDrift' | 'shake'
 
 export type Expression = {
   id: string
   headX: number
   headY: number
   headZ: number
+  /** Authored root translation used by deterministic full-body animations. */
+  stageX: number
+  stageY: number
   widthLeft: number
   widthRight: number
   heightLeft: number
@@ -119,6 +122,8 @@ export const expressionFields: ExpressionNumericField[] = [
   'headX',
   'headY',
   'headZ',
+  'stageX',
+  'stageY',
   'widthLeft',
   'widthRight',
   'heightLeft',

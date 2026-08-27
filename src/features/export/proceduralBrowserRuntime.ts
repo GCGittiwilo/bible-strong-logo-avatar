@@ -105,7 +105,7 @@ function mountAvatar(target, options = {}) {
   const gazeProfileForAnimation = () => {
     const animation = DATA.animations[currentAnimation];
     if (!animation || animation.presentation === 'logo') return null;
-    return animation.gazeProfile || 'attentive';
+    return animation.gazeProfile === 'none' ? null : (animation.gazeProfile || 'attentive');
   };
   const syncFaceClip = () => {
     if (!DATA.avatar.logoMorph && faceForwardForAnimation()) eyesLayer.removeAttribute('clip-path');
@@ -232,7 +232,11 @@ function mountAvatar(target, options = {}) {
           ? AvatarProceduralEngine.comicThinkingMouthPoseAt(time - thinkingStartedAt, reducedMotion)
         : undefined,
     });
-    const offset = AvatarProceduralEngine.ambientBodyOffset(currentPose.expression, bodyElapsed, ambientStrength);
+    const proceduralOffset = AvatarProceduralEngine.ambientBodyOffset(currentPose.expression, bodyElapsed, ambientStrength);
+    const offset = {
+      x: (currentPose.expression.stageX || 0) + proceduralOffset.x,
+      y: (currentPose.expression.stageY || 0) + proceduralOffset.y,
+    };
     motionLayer.setAttribute(
       'transform',
       'translate(' + offset.x + ' ' + offset.y + ')'
@@ -450,12 +454,10 @@ function mountAvatar(target, options = {}) {
         return api;
       }
       const previousGazeProfile = activeGazeProfile;
-      const requestedGazeProfile = DATA.animations[animationName].presentation === 'logo'
+      const requestedGazeProfile = DATA.animations[animationName].presentation === 'logo' || DATA.animations[animationName].gazeProfile === 'none'
         ? null
         : (DATA.animations[animationName].gazeProfile || 'attentive');
-      const nextGazeProfile = DATA.animations[animationName].group === 'Animations' && previousGazeProfile
-        ? previousGazeProfile
-        : requestedGazeProfile;
+      const nextGazeProfile = requestedGazeProfile;
       if (previousGazeProfile !== nextGazeProfile) {
         gazeBlendFrom = lastRenderedGaze;
         gazeBlendStartedAt = -1;

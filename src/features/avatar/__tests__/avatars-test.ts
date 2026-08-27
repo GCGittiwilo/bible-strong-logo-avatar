@@ -182,9 +182,9 @@ describe('avatar behavior revisions', () => {
       base
     )
 
-    expect(behavior.expressions).toHaveLength(base.expressions.length + 36)
-    expect(behavior.sequences).toHaveLength(base.sequences.length + 12)
-    expect(behavior.sequences.filter(sequence => sequence.group === 'Animations')).toHaveLength(11)
+    expect(behavior.expressions).toHaveLength(base.expressions.length + 32)
+    expect(behavior.sequences).toHaveLength(base.sequences.length + 10)
+    expect(behavior.sequences.filter(sequence => sequence.group === 'Animations')).toHaveLength(9)
     expect(
       behavior.sequences
         .filter(sequence => sequence.group === 'Animations')
@@ -193,13 +193,13 @@ describe('avatar behavior revisions', () => {
     expect(
       behavior.sequences
         .filter(sequence => sequence.group === 'Animations')
-        .every(sequence => sequence.gazeProfile && sequence.playbackMode === 'once')
+        .every(sequence => sequence.gazeProfile === 'none' && sequence.playbackMode === 'once')
     ).toBe(true)
     expect(
       behavior.sequences
         .filter(sequence => sequence.id.startsWith('character-'))
         .map(sequence => sequence.name)
-    ).toEqual(['Laughing', 'Crying', 'Jumping', 'Excited Bounce', 'Surprised Jolt', 'Shy Sway'])
+    ).toEqual(['Jumping', 'Excited Bounce', 'Surprised Jolt', 'Shy Sway'])
     expect(
       behavior.sequences
         .filter(sequence => sequence.id.startsWith('character-'))
@@ -207,6 +207,16 @@ describe('avatar behavior revisions', () => {
           sequence.steps.every(step => step.transition === 'smooth' && step.transitionMs >= 300)
         )
     ).toBe(true)
+    const animationExpressions = behavior.expressions.filter(expression =>
+      behavior.sequences
+        .filter(sequence => sequence.group === 'Animations')
+        .some(sequence => sequence.steps.some(step => step.expressionId === expression.id))
+    )
+    expect(animationExpressions.every(expression => expression.bodyMotion === 'none')).toBe(true)
+    expect(animationExpressions.every(expression => expression.eyeMotion === 'none')).toBe(true)
+    expect(
+      behavior.expressions.find(expression => expression.id === 'character-shy-left')?.stageX
+    ).toBe(-6)
     expect(behavior.sequences.at(-1)).toMatchObject({
       id: 'loading',
       group: 'Loading',

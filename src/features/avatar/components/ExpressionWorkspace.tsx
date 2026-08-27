@@ -349,9 +349,6 @@ export function ExpressionWorkspace({
                   { value: 'none', label: 'Aucun mouvement' },
                   { value: 'slowDrift', label: 'Dérive lente' },
                   { value: 'shake', label: 'Tremblement' },
-                  { value: 'bounce', label: 'Bond' },
-                  { value: 'laugh', label: 'Rire' },
-                  { value: 'sob', label: 'Sanglot' },
                 ]}
                 onChange={bodyMotion => update({ bodyMotion })}
               />
