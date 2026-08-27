@@ -83,6 +83,8 @@ describe('avatar export', () => {
     expect(source).toContain('comicThinkingMouthPoseAt')
     expect(source).toContain('coordinatedGazeAt')
     expect(source).toContain('applyCoordinatedGaze')
+    expect(source).toContain('setGaze(x, y)')
+    expect(source).toContain('solveGazeRig')
     expect(source).not.toContain('customElements.define')
     expect(source).not.toContain("from '")
     expect(() => parse(source, { sourceType: 'module' })).not.toThrow()

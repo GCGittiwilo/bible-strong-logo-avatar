@@ -5,7 +5,9 @@ import {
   applyAmbientMotion,
   applyCoordinatedGaze,
   coordinatedGazeAt,
+  gazeProfiles,
   hasAmbientMotion,
+  solveGazeRig,
 } from '@/features/avatar/ambientMotion'
 import { poseFromExpression, renderAvatar } from '@/features/avatar/geometry'
 import { defaultExpression } from '@/features/avatar/presets'
@@ -117,15 +119,16 @@ describe('perpetual expression motion', () => {
     expect(Math.abs(largeGlance.headOffset.y)).toBeGreaterThan(2)
   })
 
-  it('moves the eyes first, then turns the head toward the same 3D target', () => {
-    const earlyGaze = coordinatedGazeAt('scanning', 650)
-    const followedGaze = coordinatedGazeAt('scanning', 1200)
-    const animated = applyCoordinatedGaze(defaultExpression, followedGaze)
+  it('derives the head from the same authoritative eye target', () => {
+    const eyeOnly = solveGazeRig({ x: 0.2, y: -0.12 })
+    const eyeAndHead = solveGazeRig({ x: 0.82, y: -0.64 })
+    const animated = applyCoordinatedGaze(defaultExpression, eyeAndHead)
 
-    expect(earlyGaze.eyeOffset.x).not.toBeCloseTo(0)
-    expect(earlyGaze.headOffset.y).toBeCloseTo(0)
+    expect(eyeOnly.eyeOffset.x).not.toBeCloseTo(0)
+    expect(eyeOnly.headOffset.y).toBeCloseTo(0)
     expect(animated.headY).not.toBeCloseTo(defaultExpression.headY)
-    expect(Math.sign(animated.headY)).toBe(Math.sign(followedGaze.target.x))
+    expect(Math.sign(animated.headY)).toBe(Math.sign(eyeAndHead.eyeSocket.yaw))
+    expect(Math.sign(animated.headX)).toBe(Math.sign(eyeAndHead.eyeSocket.pitch))
   })
 
   it('resolves large looks through socket, neck, and forward-facing body limits', () => {
@@ -138,6 +141,20 @@ describe('perpetual expression motion', () => {
     expect(Math.abs(gaze.bodyOffset.yaw)).toBeLessThanOrEqual(10)
     expect(Math.abs(gaze.bodyOffset.pitch)).toBeLessThanOrEqual(6)
     expect(Math.sign(gaze.eyeSocket.yaw)).toBe(Math.sign(gaze.neckOffset.yaw))
+  })
+
+  it('keeps every automated head direction linked to its current eye direction', () => {
+    gazeProfiles.forEach(profile => {
+      for (let elapsedMs = 0; elapsedMs <= 6000; elapsedMs += 120) {
+        const gaze = coordinatedGazeAt(profile, elapsedMs)
+        if (Math.abs(gaze.neckOffset.yaw) > 0.001) {
+          expect(Math.sign(gaze.neckOffset.yaw)).toBe(Math.sign(gaze.eyeSocket.yaw))
+        }
+        if (Math.abs(gaze.neckOffset.pitch) > 0.001) {
+          expect(Math.sign(gaze.neckOffset.pitch)).toBe(Math.sign(gaze.eyeSocket.pitch))
+        }
+      }
+    })
   })
 
   it('makes chat gaze lead the head instead of preserving unrelated expression rotation', () => {

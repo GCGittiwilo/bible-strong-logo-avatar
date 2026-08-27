@@ -2269,6 +2269,93 @@ p {
   display: grid;
   gap: 15px;
 }
+.gaze-rig-card {
+  display: grid;
+  gap: 14px;
+}
+.gaze-rig-pad {
+  position: relative;
+  width: min(100%, 250px);
+  aspect-ratio: 1;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid #d5d9e3;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, rgb(91 127 229 / 10%) 0 8%, transparent 8.5%),
+    radial-gradient(
+      circle at center,
+      transparent 0 48%,
+      rgb(91 127 229 / 8%) 48.5% 49%,
+      transparent 49.5%
+    ),
+    #f7f8fb;
+  box-shadow: inset 0 0 28px rgb(31 38 53 / 6%);
+  cursor: crosshair;
+  touch-action: none;
+}
+.gaze-rig-pad:focus-visible {
+  outline: 3px solid rgb(91 127 229 / 28%);
+  outline-offset: 3px;
+}
+.gaze-rig-axis {
+  position: absolute;
+  background: #dfe3ec;
+  pointer-events: none;
+}
+.gaze-rig-axis-x {
+  top: 50%;
+  right: 8%;
+  left: 8%;
+  height: 1px;
+}
+.gaze-rig-axis-y {
+  top: 8%;
+  bottom: 8%;
+  left: 50%;
+  width: 1px;
+}
+.gaze-rig-target {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border: 5px solid white;
+  border-radius: 50%;
+  background: #17191d;
+  box-shadow: 0 5px 16px rgb(24 28 35 / 26%);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition:
+    left 80ms linear,
+    top 80ms linear;
+}
+.gaze-rig-pad:active .gaze-rig-target {
+  transform: translate(-50%, -50%) scale(1.12);
+  transition: none;
+}
+.gaze-rig-readout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.gaze-rig-readout span {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid #e3e6ed;
+  border-radius: 10px;
+  background: #fafbfc;
+  color: #343b49;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.gaze-rig-readout small {
+  color: #858c99;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 .state-groups strong {
   display: block;
   margin-bottom: 7px;

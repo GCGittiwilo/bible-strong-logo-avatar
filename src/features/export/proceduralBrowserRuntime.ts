@@ -98,8 +98,9 @@ function mountAvatar(target, options = {}) {
     });
   };
   let currentAnimation = options.animation && DATA.animations[options.animation] ? options.animation : animationNames[0];
+  let manualGazeTarget = null;
   const faceForwardForAnimation = () => Boolean(
-    DATA.avatar.faceForward && DATA.animations[currentAnimation]?.faceMode !== 'attached'
+    DATA.avatar.faceForward && !manualGazeTarget && DATA.animations[currentAnimation]?.faceMode !== 'attached'
   );
   const gazeProfileForAnimation = () => {
     const animation = DATA.animations[currentAnimation];
@@ -184,9 +185,11 @@ function mountAvatar(target, options = {}) {
     const ambientExpression = currentPose.expression.bodyMotion !== 'none'
       ? AvatarProceduralEngine.applyAmbientBodyMotion(currentPose.expression, bodyElapsed, ambientStrength)
       : currentPose.expression;
-    let gaze = !reducedMotion && (playing || paused || liveGaze) && activeGazeProfile
-      ? AvatarProceduralEngine.coordinatedGazeAt(activeGazeProfile, time - gazeStartedAt)
-      : null;
+    let gaze = manualGazeTarget
+      ? AvatarProceduralEngine.solveGazeRig(manualGazeTarget)
+      : !reducedMotion && (playing || paused || liveGaze) && activeGazeProfile
+        ? AvatarProceduralEngine.coordinatedGazeAt(activeGazeProfile, time - gazeStartedAt)
+        : null;
     if (gaze && DATA.animations[currentAnimation]?.group === 'Animations') {
       gaze = { ...gaze, headBaseWeight: 1 };
     }
@@ -500,10 +503,6 @@ function mountAvatar(target, options = {}) {
       paused = true;
       playing = false;
       liveGaze = false;
-      activeGazeProfile = null;
-      lastRenderedGaze = null;
-      gazeBlendFrom = null;
-      gazeBlendStartedAt = -1;
       render();
       return api;
     },
@@ -516,6 +515,11 @@ function mountAvatar(target, options = {}) {
       pausedBlinkDelay = 0;
       paused = false;
       playing = false;
+      liveGaze = false;
+      activeGazeProfile = null;
+      lastRenderedGaze = null;
+      gazeBlendFrom = null;
+      gazeBlendStartedAt = -1;
       gazeStartedAt = performance.now();
       gazePausedAt = null;
       stepIndex = 0;
@@ -533,6 +537,14 @@ function mountAvatar(target, options = {}) {
       talkingStartedAt = performance.now();
       render();
       if (talking && !reducedMotion) requestTick();
+      return api;
+    },
+    setGaze(x, y) {
+      manualGazeTarget = x === null || x === undefined
+        ? null
+        : { x: Math.max(-1, Math.min(1, Number(x) || 0)), y: Math.max(-1, Math.min(1, Number(y) || 0)) };
+      syncFaceClip();
+      render();
       return api;
     },
     startTalking() { return api.setTalking(true); },

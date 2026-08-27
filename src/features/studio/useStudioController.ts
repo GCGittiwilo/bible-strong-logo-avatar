@@ -49,6 +49,7 @@ import {
   blendCoordinatedGaze,
   coordinatedGazeAt,
   hasAmbientMotion,
+  solveGazeRig,
   type CoordinatedGaze,
   type GazeProfile,
 } from '@/features/avatar/ambientMotion'
@@ -168,6 +169,11 @@ export function useStudioController() {
   const [thinking, setThinking] = useState(false)
   const [faceRevealed, setFaceRevealed] = useState(!initialAvatar.logoMorph)
   const [activeFaceForward, setActiveFaceForward] = useState(Boolean(initialAvatar.faceForward))
+  const [manualGazeTarget, setManualGazeTargetState] = useState<{
+    x: number
+    y: number
+  } | null>(null)
+  const manualGazeTargetRef = useRef(manualGazeTarget)
   const faceReveal = useMotionValue(initialAvatar.logoMorph ? 0 : 1)
   const faceRevealAnimation = useRef<ReturnType<typeof animate> | null>(null)
   const initialStatePlayback = initialDocument.playback
@@ -420,13 +426,16 @@ export function useStudioController() {
       lastBodyAmbientElapsed.current = frameTimeMs - bodyAmbientStartedAt.current
     }
     const gazeProfile = activeGazeProfileRef.current
+    const gazeTarget = manualGazeTargetRef.current
     if (gazeProfile && frameTimeMs !== undefined) {
       if (gazeStartedAt.current < 0) gazeStartedAt.current = frameTimeMs - lastGazeElapsed.current
       lastGazeElapsed.current = frameTimeMs - gazeStartedAt.current
     }
-    const rawGaze = gazeProfile
-      ? coordinatedGazeAt(gazeProfile, lastGazeElapsed.current, reduceMotion ? 0 : 1)
-      : null
+    const rawGaze = gazeTarget
+      ? solveGazeRig(gazeTarget, 1)
+      : gazeProfile
+        ? coordinatedGazeAt(gazeProfile, lastGazeElapsed.current, reduceMotion ? 0 : 1)
+        : null
     let gaze = rawGaze
     if (gaze && activeSequenceRef.current?.group === 'Animations') {
       gaze = { ...gaze, headBaseWeight: 1 }
@@ -499,6 +508,22 @@ export function useStudioController() {
   }
 
   useMotionValueEvent(blinkValue, 'change', latest => paintPose(displayedPose.current, latest))
+
+  const setManualGazeTarget = (target: { x: number; y: number } | null) => {
+    const next = target
+      ? {
+          x: Math.max(-1, Math.min(1, target.x)),
+          y: Math.max(-1, Math.min(1, target.y)),
+        }
+      : null
+    manualGazeTargetRef.current = next
+    setManualGazeTargetState(next)
+    const avatar = avatarsRef.current.find(item => item.id === activeAvatarIdRef.current)
+    updateActiveFaceForward(
+      next ? false : resolveSequenceFaceForward(avatar?.faceForward, activeSequenceRef.current)
+    )
+    paintPose(displayedPose.current, undefined, performance.now())
+  }
   useMotionValueEvent(faceReveal, 'change', latest => {
     const avatar = avatarsRef.current.find(item => item.id === activeAvatarIdRef.current)
     paintRenderedLogoMorph(renderedScene, avatar?.logoMorph, latest)
@@ -1171,7 +1196,7 @@ export function useStudioController() {
     gazeStartedAt.current = -1
     lastGazeElapsed.current = 0
     const avatar = avatarsRef.current.find(item => item.id === activeAvatarIdRef.current)
-    updateActiveFaceForward(Boolean(avatar?.faceForward))
+    updateActiveFaceForward(manualGazeTargetRef.current ? false : Boolean(avatar?.faceForward))
     paintPose(displayedPose.current, 1)
     setStatePlaying(false)
     setPlaybackStatus('stopped')
@@ -1977,6 +2002,7 @@ export function useStudioController() {
     language,
     launchSequence,
     linked,
+    manualGazeTarget,
     mode,
     openExpressionEditor,
     openSequenceEditor,
@@ -2025,6 +2051,7 @@ export function useStudioController() {
     setLanguage,
     setLinked,
     setMode,
+    setManualGazeTarget,
     setPendingProjectImport,
     setSelectedEyeSide,
     setSelectedSequenceStepId,

@@ -157,13 +157,29 @@ export const coordinatedGazeAt = (
   profile: GazeProfile,
   elapsedMs: number,
   strength = 1
+): CoordinatedGaze =>
+  solveGazeRig(
+    gazeTargetAt(profile, elapsedMs),
+    strength,
+    profile === 'orbit' || profile === 'animation' ? 1 : 0.18
+  )
+
+/**
+ * Resolves one authoritative gaze target through the anatomical rig. The head never
+ * samples a separate animation clock: it can only move when this eye target exceeds
+ * the socket range.
+ */
+export const solveGazeRig = (
+  target: Readonly<{ x: number; y: number }>,
+  strength = 1,
+  headBaseWeight = 0.18
 ): CoordinatedGaze => {
-  const eyeTarget = gazeTargetAt(profile, elapsedMs)
-  // The eyes acquire a target first. After that short lead, the same target is resolved
-  // through three anatomical limits: eye socket -> neck -> forward-facing torso.
-  const headTarget = elapsedMs <= 190 ? { x: 0, y: 0 } : gazeTargetAt(profile, elapsedMs - 190)
-  const targetYaw = headTarget.x * 58 * strength
-  const targetPitch = -headTarget.y * 42 * strength
+  const resolvedTarget = {
+    x: Math.max(-1, Math.min(1, target.x)) * strength,
+    y: Math.max(-1, Math.min(1, target.y)) * strength,
+  }
+  const targetYaw = resolvedTarget.x * 58
+  const targetPitch = resolvedTarget.y * 42
   const initialEyeYaw = clampDegrees(targetYaw, 18)
   const initialEyePitch = clampDegrees(targetPitch, 13)
   const desiredHeadYaw = targetYaw - initialEyeYaw
@@ -178,7 +194,7 @@ export const coordinatedGazeAt = (
   const eyePitch = clampDegrees(targetPitch - visibleHeadPitch, 13)
   const roll = clampDegrees(-visibleHeadYaw * 0.08, 4)
   return {
-    target: { x: eyeTarget.x * strength, y: eyeTarget.y * strength },
+    target: resolvedTarget,
     eyeOffset: {
       x: (eyeYaw / 18) * 14,
       y: (eyePitch / 13) * 9,
@@ -191,7 +207,7 @@ export const coordinatedGazeAt = (
     eyeSocket: { pitch: eyePitch, yaw: eyeYaw },
     neckOffset: { pitch: neckPitch, yaw: neckYaw, roll },
     bodyOffset: { pitch: bodyPitch, yaw: bodyYaw, roll: 0 },
-    headBaseWeight: profile === 'orbit' || profile === 'animation' ? 1 : 0.18,
+    headBaseWeight,
   }
 }
 

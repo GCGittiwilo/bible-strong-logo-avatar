@@ -14,7 +14,14 @@ import {
   Upload,
 } from 'lucide-react'
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from 'motion/react'
-import { type CSSProperties, useLayoutEffect, useRef, useState } from 'react'
+import {
+  type CSSProperties,
+  type KeyboardEvent,
+  type PointerEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 
 import { Accordion } from '@/components/ui/accordion'
 import { Badge } from '@/components/ui/badge'
@@ -65,11 +72,105 @@ import {
   SurfaceThumbnail,
 } from '@/features/avatar/components/ExpressionWorkspace'
 import { defaultExpression } from '@/features/avatar/presets'
+import { solveGazeRig } from '@/features/avatar/ambientMotion'
 import { surfaceLabels, surfacePresets } from '@/features/avatar/surfaces'
 import { type SnapshotBackground } from '@/features/export/snapshotExporter'
 import { AvatarPage } from '@/features/studio/components/AvatarDrawer'
 import { StudioIdentity } from '@/features/studio/components/StudioIdentity'
 import type { StudioController } from '@/features/studio/useStudioController'
+
+function GazeRigControl({
+  target,
+  onChange,
+}: {
+  target: { x: number; y: number } | null
+  onChange: (target: { x: number; y: number } | null) => void
+}) {
+  const position = target ?? { x: 0, y: 0 }
+  const rig = solveGazeRig(position)
+  const updateFromPointer = (event: PointerEvent<HTMLDivElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    let x = (event.clientX - (bounds.left + bounds.width / 2)) / (bounds.width / 2)
+    let y = (event.clientY - (bounds.top + bounds.height / 2)) / (bounds.height / 2)
+    const magnitude = Math.hypot(x, y)
+    if (magnitude > 1) {
+      x /= magnitude
+      y /= magnitude
+    }
+    onChange({ x, y })
+  }
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const delta = event.shiftKey ? 0.2 : 0.08
+    const directions: Partial<Record<string, { x: number; y: number }>> = {
+      ArrowLeft: { x: -delta, y: 0 },
+      ArrowRight: { x: delta, y: 0 },
+      ArrowUp: { x: 0, y: -delta },
+      ArrowDown: { x: 0, y: delta },
+    }
+    const direction = directions[event.key]
+    if (!direction) return
+    event.preventDefault()
+    onChange({ x: position.x + direction.x, y: position.y + direction.y })
+  }
+  return (
+    <InspectorCard className="gaze-rig-card">
+      <PanelTitle
+        title="Live gaze rig"
+        subtitle="Drag the target. The eyes are authoritative; socket overflow drives the head, then the forward-facing body."
+      />
+      <div
+        className="gaze-rig-pad"
+        role="slider"
+        tabIndex={0}
+        aria-label="Gaze target"
+        aria-valuetext={`${Math.round(position.x * 100)} horizontal, ${Math.round(position.y * 100)} vertical`}
+        data-active={target ? '' : undefined}
+        onPointerDown={event => {
+          event.currentTarget.setPointerCapture(event.pointerId)
+          updateFromPointer(event)
+        }}
+        onPointerMove={event => {
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) updateFromPointer(event)
+        }}
+        onPointerUp={event => event.currentTarget.releasePointerCapture(event.pointerId)}
+        onKeyDown={handleKeyDown}
+      >
+        <span className="gaze-rig-axis gaze-rig-axis-x" />
+        <span className="gaze-rig-axis gaze-rig-axis-y" />
+        <span
+          className="gaze-rig-target"
+          style={{ left: `${50 + position.x * 44}%`, top: `${50 + position.y * 44}%` }}
+        />
+      </div>
+      <div className="gaze-rig-readout">
+        <span>
+          <small>Eyes</small>
+          {rig.eyeSocket.yaw.toFixed(1)}° / {rig.eyeSocket.pitch.toFixed(1)}°
+        </span>
+        <span>
+          <small>Eye socket</small>
+          ±18° / ±13°
+        </span>
+        <span>
+          <small>Head</small>
+          {rig.neckOffset.yaw.toFixed(1)}° / {rig.neckOffset.pitch.toFixed(1)}°
+        </span>
+        <span>
+          <small>Body</small>
+          {rig.bodyOffset.yaw.toFixed(1)}° / {rig.bodyOffset.pitch.toFixed(1)}°
+        </span>
+      </div>
+      <div className="button-row">
+        <Button variant="outline" type="button" onClick={() => onChange({ x: 0, y: 0 })}>
+          Center gaze
+        </Button>
+        <Button variant="outline" type="button" onClick={() => onChange(null)}>
+          Resume movement
+        </Button>
+      </div>
+    </InspectorCard>
+  )
+}
 
 export function StudioInspector({ controller }: { controller: StudioController }) {
   const {
@@ -126,6 +227,7 @@ export function StudioInspector({ controller }: { controller: StudioController }
     language,
     launchSequence,
     linked,
+    manualGazeTarget,
     mode,
     openExpressionEditor,
     openSequenceEditor,
@@ -166,6 +268,7 @@ export function StudioInspector({ controller }: { controller: StudioController }
     setLinked,
     setLanguage,
     setMode,
+    setManualGazeTarget,
     setSelectedSequenceStepId,
     setSequenceEditing,
     setSnapshotBackground,
@@ -1452,6 +1555,9 @@ export function StudioInspector({ controller }: { controller: StudioController }
               !bodyEditing &&
               (mode === 'movements' || mode === 'states') && (
                 <div className="panel-stack">
+                  {mode === 'movements' && (
+                    <GazeRigControl target={manualGazeTarget} onChange={setManualGazeTarget} />
+                  )}
                   <InspectorCard>
                     <div className="preset-header">
                       <div>
