@@ -366,6 +366,12 @@ export function useStudioController() {
   const lastRenderedGaze = useRef<CoordinatedGaze | null>(null)
   const gazeBlendFrom = useRef<CoordinatedGaze | null>(null)
   const gazeBlendStartedAt = useRef(-1)
+  const gazeRelease = useRef<{
+    from: CoordinatedGaze
+    startedAt: number
+    durationMs: number
+  } | null>(null)
+  const deferredFaceForward = useRef<boolean | null>(null)
   const transitionTarget = useRef<Expression>({ ...initialExpression })
   const canonicalTarget = useRef<Expression>({ ...initialExpression })
   const retargetFrom = useRef<Expression | null>(null)
@@ -478,6 +484,14 @@ export function useStudioController() {
     if (gaze && activeSequenceRef.current?.group === 'Animations') {
       gaze = { ...gaze, headBaseWeight: 1 }
     }
+    if (gaze && gazeRelease.current) gazeRelease.current = null
+    const release = gazeRelease.current
+    if (!gaze && release && frameTimeMs !== undefined) {
+      if (release.startedAt < 0) release.startedAt = frameTimeMs
+      const progress = Math.min((frameTimeMs - release.startedAt) / release.durationMs, 1)
+      gaze = blendCoordinatedGaze(release.from, solveGazeRig({ x: 0, y: 0 }, 1, 1), progress)
+      if (progress >= 1) gazeRelease.current = null
+    }
     if (gaze && gazeBlendFrom.current && frameTimeMs !== undefined) {
       if (gazeBlendStartedAt.current < 0) gazeBlendStartedAt.current = frameTimeMs
       const progress = Math.min((frameTimeMs - gazeBlendStartedAt.current) / 520, 1)
@@ -585,17 +599,30 @@ export function useStudioController() {
       y: Math.max(-1, Math.min(1, target.y)),
     }
   }
-  const updateCursorFollowEnabled = (next: boolean) => {
+  const updateCursorFollowEnabled = (next: boolean, releaseDurationMs?: number) => {
+    const wasActive = cursorFollowActiveRef.current
     cursorFollowActiveRef.current = next
     setCursorFollowActive(next)
     cursorLastFrame.current = -1
     if (next) {
-      cursorDesiredTarget.current = { x: 0, y: 0 }
-      cursorRenderedTarget.current = { x: 0, y: 0 }
+      gazeRelease.current = null
+      if (!wasActive) {
+        cursorDesiredTarget.current = { x: 0, y: 0 }
+        cursorRenderedTarget.current = { x: 0, y: 0 }
+      }
       manualGazeTargetRef.current = cursorRenderedTarget.current
       setManualGazeTargetState(null)
       updateActiveFaceForward(false)
       return
+    }
+    if (wasActive && releaseDurationMs && lastRenderedGaze.current) {
+      gazeRelease.current = {
+        from: lastRenderedGaze.current,
+        startedAt: -1,
+        durationMs: Math.max(releaseDurationMs, 1),
+      }
+    } else {
+      gazeRelease.current = null
     }
     manualGazeTargetRef.current = null
     cursorDesiredTarget.current = { x: 0, y: 0 }
@@ -620,6 +647,11 @@ export function useStudioController() {
   useMotionValueEvent(faceReveal, 'change', latest => {
     const avatar = avatarsRef.current.find(item => item.id === activeAvatarIdRef.current)
     paintRenderedLogoMorph(renderedScene, avatar?.logoMorph, latest)
+    if (latest <= 0.001 && deferredFaceForward.current !== null) {
+      const nextFaceForward = deferredFaceForward.current
+      deferredFaceForward.current = null
+      updateActiveFaceForward(nextFaceForward)
+    }
   })
 
   const paintAmbientFrame = useEffectEvent((time: number) => {
@@ -1316,6 +1348,8 @@ export function useStudioController() {
     lastRenderedGaze.current = null
     gazeBlendFrom.current = null
     gazeBlendStartedAt.current = -1
+    gazeRelease.current = null
+    deferredFaceForward.current = null
     gazeStartedAt.current = -1
     lastGazeElapsed.current = 0
     const avatar = avatarsRef.current.find(item => item.id === activeAvatarIdRef.current)
@@ -1430,6 +1464,8 @@ export function useStudioController() {
       avatarsRef.current.find(item => item.id === activeAvatarIdRef.current) ?? activeAvatar
     const previousSequence = activeSequenceRef.current
     const switchingSequence = !resume && previousSequence?.id !== sequence.id
+    const cursorWasActive = cursorFollowActiveRef.current
+    const entryTransitionMs = Math.max(sequence.steps[0]?.transitionMs ?? 500, 680)
     const previousGazeProfile = activeGazeProfileRef.current
     const requestedGazeProfile = resolveSequenceGazeProfile(sequence)
     // Authored actions opt out of live gaze so a second head rig cannot fight
@@ -1445,9 +1481,26 @@ export function useStudioController() {
     setTalking(false)
     setThinking(false)
     if (playbackAvatar.logoMorph) setLogoFace(sequence.presentation !== 'logo')
-    updateActiveFaceForward(resolveSequenceFaceForward(playbackAvatar.faceForward, sequence))
+    const nextFaceForward = resolveSequenceFaceForward(playbackAvatar.faceForward, sequence)
+    if (
+      cursorWasActive &&
+      sequence.presentation === 'logo' &&
+      playbackAvatar.logoMorph &&
+      faceReveal.get() > 0.001
+    ) {
+      // Keep the visible face attached to its current 3D pose while it fades out.
+      // Switching to the logo's locked-face mode before the fade begins produces
+      // a one-frame eye/head snap even when the gaze itself is interpolated.
+      deferredFaceForward.current = nextFaceForward
+    } else {
+      deferredFaceForward.current = null
+      updateActiveFaceForward(nextFaceForward)
+    }
     activeSequenceRef.current = sequence
-    updateCursorFollowEnabled(Boolean(sequence.driver))
+    updateCursorFollowEnabled(
+      Boolean(sequence.driver),
+      switchingSequence ? entryTransitionMs : undefined
+    )
     paintPose(displayedPose.current, undefined, performance.now())
     const id = sequence.id
     playbackTimeline.current = beginPlayback(playbackTimeline.current, resume)
