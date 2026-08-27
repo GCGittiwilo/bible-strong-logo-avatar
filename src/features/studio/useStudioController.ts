@@ -338,6 +338,13 @@ export function useStudioController() {
   const eyeAmbientSignature = useRef('none')
   const bodyAmbientSignature = useRef('none')
   const lastAmbientStrength = useRef(1)
+  const lastAmbientExpression = useRef<Expression>({ ...initialExpression })
+  const lastRenderedOffset = useRef({ x: 0, y: 0 })
+  const sequenceOffsetBridge = useRef<{
+    from: { x: number; y: number }
+    startedAt: number
+    durationMs: number
+  } | null>(null)
   const gazeStartedAt = useRef(-1)
   const lastGazeElapsed = useRef(0)
   const lastRenderedGaze = useRef<CoordinatedGaze | null>(null)
@@ -457,6 +464,7 @@ export function useStudioController() {
           resolvedAmbientStrength
         )
       : pose.expression
+    lastAmbientExpression.current = { ...ambientExpression }
     const renderedExpression = gaze
       ? applyCoordinatedGaze(ambientExpression, gaze)
       : ambientExpression
@@ -495,16 +503,26 @@ export function useStudioController() {
     })
     paintRenderedScene(renderedScene, geometry)
     paintRenderedLogoMorph(renderedScene, avatar?.logoMorph, faceReveal.get())
-    paintRenderedOffset(
-      renderedScene,
-      bodyAmbientEnabled
-        ? ambientBodyOffset(
-            pose.expression,
-            lastBodyAmbientElapsed.current,
-            resolvedAmbientStrength
-          )
-        : { x: 0, y: 0 }
-    )
+    const ambientOffset = bodyAmbientEnabled
+      ? ambientBodyOffset(pose.expression, lastBodyAmbientElapsed.current, resolvedAmbientStrength)
+      : { x: 0, y: 0 }
+    const bridge = sequenceOffsetBridge.current
+    let renderedOffset = ambientOffset
+    if (bridge) {
+      if (bridge.startedAt < 0 && frameTimeMs !== undefined) bridge.startedAt = frameTimeMs
+      const linearProgress =
+        frameTimeMs === undefined || bridge.startedAt < 0
+          ? 0
+          : Math.min((frameTimeMs - bridge.startedAt) / bridge.durationMs, 1)
+      const progress = linearProgress * linearProgress * (3 - 2 * linearProgress)
+      renderedOffset = {
+        x: bridge.from.x + (ambientOffset.x - bridge.from.x) * progress,
+        y: bridge.from.y + (ambientOffset.y - bridge.from.y) * progress,
+      }
+      if (linearProgress >= 1) sequenceOffsetBridge.current = null
+    }
+    lastRenderedOffset.current = renderedOffset
+    paintRenderedOffset(renderedScene, renderedOffset)
   }
 
   useMotionValueEvent(blinkValue, 'change', latest => paintPose(displayedPose.current, latest))
@@ -661,7 +679,9 @@ export function useStudioController() {
       setActiveExpression(index)
       return
     }
-    const current = displayedPose.current.expression
+    const displayedExpression = displayedPose.current.expression
+    const motionLayerChanges = displayedExpression.bodyMotion !== next.bodyMotion
+    const current = motionLayerChanges ? lastAmbientExpression.current : displayedExpression
     const nearestAngle = (target: number, from: number) => {
       let resolved = target
       while (resolved - from > 180) resolved -= 360
@@ -679,6 +699,13 @@ export function useStudioController() {
     }
 
     if (transitionSettings) {
+      if (motionLayerChanges) {
+        sequenceOffsetBridge.current = {
+          from: { ...lastRenderedOffset.current },
+          startedAt: -1,
+          durationMs: Math.max(transitionSettings.transitionMs, 1),
+        }
+      }
       stopTransition(true)
       stopColorTransitions()
       const durationMs = transitionSettings.transitionMs
@@ -1214,6 +1241,8 @@ export function useStudioController() {
     }
     const playbackAvatar =
       avatarsRef.current.find(item => item.id === activeAvatarIdRef.current) ?? activeAvatar
+    const previousSequence = activeSequenceRef.current
+    const switchingSequence = !resume && previousSequence?.id !== sequence.id
     const previousGazeProfile = activeGazeProfileRef.current
     const requestedGazeProfile = resolveSequenceGazeProfile(sequence)
     const nextGazeProfile =
@@ -1232,7 +1261,7 @@ export function useStudioController() {
     if (playbackAvatar.logoMorph) setLogoFace(sequence.presentation !== 'logo')
     updateActiveFaceForward(resolveSequenceFaceForward(playbackAvatar.faceForward, sequence))
     activeSequenceRef.current = sequence
-    paintPose(displayedPose.current)
+    paintPose(displayedPose.current, undefined, performance.now())
     const id = sequence.id
     playbackTimeline.current = beginPlayback(playbackTimeline.current, resume)
     setSelectedState(id)
@@ -1248,20 +1277,29 @@ export function useStudioController() {
       )
       stateTimer.current = setTimeout(advance, delay)
     }
+    let enteringSequence = switchingSequence
     const playCurrentStep = () => {
       playbackTimeline.current = { ...playbackTimeline.current, stepDueAt: null }
       const step = sequence.steps[playbackTimeline.current.position]
       const availableExpressions = expressionsRef.current
       const expressionIndex = findExpressionIndex(availableExpressions, step.expressionId)
       const preset = availableExpressions[expressionIndex]
-      const durationMs = (reduceMotion ? 0 : step.transitionMs) + step.holdMs
+      const transitionSettings = enteringSequence
+        ? {
+            ...step,
+            transitionMs: Math.max(step.transitionMs, 680),
+            transition: 'smooth' as const,
+          }
+        : step
+      enteringSequence = false
+      const durationMs = (reduceMotion ? 0 : transitionSettings.transitionMs) + step.holdMs
       setPlaybackVisual(current => ({
         position: playbackTimeline.current.position,
         run: current.run + 1,
         durationMs,
       }))
       if (preset) {
-        transitionToExpression(preset, expressionIndex, step)
+        transitionToExpression(preset, expressionIndex, transitionSettings)
       }
       scheduleAdvance(durationMs)
     }

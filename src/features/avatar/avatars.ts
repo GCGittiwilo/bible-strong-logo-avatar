@@ -252,7 +252,6 @@ const characterExpressions = [
     positionYRight: 5,
     leftAngle: 17,
     rightAngle: -17,
-    eyeMotion: 'shake',
     bodyMotion: 'sob',
   }),
   characterExpression('character-cry-deep', {
@@ -266,7 +265,6 @@ const characterExpressions = [
     positionYRight: 10,
     leftAngle: 23,
     rightAngle: -23,
-    eyeMotion: 'shake',
     bodyMotion: 'sob',
   }),
   characterExpression('character-jump-crouch', {
@@ -329,7 +327,7 @@ const characterExpressions = [
     heightLeft: 76,
     heightRight: 76,
     spacing: 62,
-    bodyMotion: 'shake',
+    bodyMotion: 'slowDrift',
   }),
   characterExpression('character-recoil', {
     headX: -14,
@@ -338,7 +336,7 @@ const characterExpressions = [
     heightLeft: 35,
     heightRight: 35,
     spacing: 53,
-    bodyMotion: 'shake',
+    bodyMotion: 'slowDrift',
   }),
   characterExpression('character-shy-left', {
     headX: -8,
@@ -439,7 +437,7 @@ const characterSequence = (
   description: string,
   expressionIds: string[],
   gazeProfile: AvatarSequence['gazeProfile'],
-  transitionMs = 230
+  transitionMs = 420
 ): AvatarSequence => ({
   id,
   name,
@@ -453,9 +451,9 @@ const characterSequence = (
   steps: expressionIds.map((expressionId, index) => ({
     id: `${id}-step-${index}`,
     expressionId,
-    holdMs: index === expressionIds.length - 1 ? 80 : 170,
+    holdMs: index === expressionIds.length - 1 ? 80 : 120,
     transitionMs,
-    transition: index === 1 ? 'snappy' : 'smooth',
+    transition: 'smooth',
   })),
   blink: { ...spinBlink, initialDelayMs: 900 },
 })
@@ -474,7 +472,7 @@ const characterSequences = [
       'character-rest',
     ],
     'celebratory',
-    190
+    360
   ),
   characterSequence(
     'character-crying',
@@ -489,7 +487,7 @@ const characterSequences = [
       'character-rest',
     ],
     'reflective',
-    250
+    440
   ),
   characterSequence(
     'character-jumping',
@@ -503,7 +501,7 @@ const characterSequences = [
       'character-rest',
     ],
     'celebratory',
-    175
+    300
   ),
   characterSequence(
     'character-excited-bounce',
@@ -518,7 +516,7 @@ const characterSequences = [
       'character-rest',
     ],
     'celebratory',
-    180
+    320
   ),
   characterSequence(
     'character-surprised-jolt',
@@ -532,7 +530,7 @@ const characterSequences = [
       'character-rest',
     ],
     'alert',
-    165
+    340
   ),
   characterSequence(
     'character-shy-sway',
@@ -546,7 +544,7 @@ const characterSequences = [
       'character-rest',
     ],
     'reflective',
-    360
+    520
   ),
 ]
 

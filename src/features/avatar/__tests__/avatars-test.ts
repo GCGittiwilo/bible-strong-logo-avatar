@@ -200,6 +200,13 @@ describe('avatar behavior revisions', () => {
         .filter(sequence => sequence.id.startsWith('character-'))
         .map(sequence => sequence.name)
     ).toEqual(['Laughing', 'Crying', 'Jumping', 'Excited Bounce', 'Surprised Jolt', 'Shy Sway'])
+    expect(
+      behavior.sequences
+        .filter(sequence => sequence.id.startsWith('character-'))
+        .every(sequence =>
+          sequence.steps.every(step => step.transition === 'smooth' && step.transitionMs >= 300)
+        )
+    ).toBe(true)
     expect(behavior.sequences.at(-1)).toMatchObject({
       id: 'loading',
       group: 'Loading',

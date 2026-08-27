@@ -408,15 +408,15 @@ export const ambientBodyOffset = (expression: Expression, elapsedMs: number, str
   if (expression.bodyMotion === 'laugh') {
     const time = elapsedMs / 1000
     return {
-      x: Math.sin(time * 12.5) * 1.8 * strength,
-      y: -Math.abs(Math.sin(time * 12.5)) * 4.8 * strength,
+      x: Math.sin(time * 7.8) * 1.25 * strength,
+      y: -Math.abs(Math.sin(time * 7.8)) * 3.2 * strength,
     }
   }
   if (expression.bodyMotion === 'sob') {
     const time = elapsedMs / 1000
     return {
-      x: Math.sin(time * 4.8) * 0.7 * strength,
-      y: Math.abs(Math.sin(time * 9.6)) * 2.8 * strength,
+      x: Math.sin(time * 3.2) * 0.55 * strength,
+      y: Math.abs(Math.sin(time * 5.4)) * 2.15 * strength,
     }
   }
   return { x: 0, y: 0 }
@@ -462,12 +462,12 @@ export const applyAmbientBodyMotion = (
     next.headZ += Math.sin(phase * Math.PI * 2) * 2.4 * strength
   } else if (expression.bodyMotion === 'laugh') {
     const time = elapsedMs / 1000
-    next.headX += Math.sin(time * 12.5) * 4.8 * strength
-    next.headZ += Math.sin(time * 6.25) * 5.5 * strength
+    next.headX += Math.sin(time * 7.8) * 3.2 * strength
+    next.headZ += Math.sin(time * 3.9) * 3.6 * strength
   } else if (expression.bodyMotion === 'sob') {
     const time = elapsedMs / 1000
-    next.headX -= (2.4 + Math.abs(Math.sin(time * 9.6)) * 5.2) * strength
-    next.headZ += Math.sin(time * 4.8) * 1.8 * strength
+    next.headX -= (1.6 + Math.abs(Math.sin(time * 5.4)) * 3.4) * strength
+    next.headZ += Math.sin(time * 3.2) * 1.25 * strength
   }
 
   return next
