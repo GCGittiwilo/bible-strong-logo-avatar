@@ -583,7 +583,12 @@ export function AvatarCanvas({
   const editor =
     selectedSide === null
       ? null
-      : renderEyeEditor(poseWithAvatarEyes(expression, avatarEyes), surface, selectedSide)
+      : renderEyeEditor(
+          poseWithAvatarEyes(expression, avatarEyes),
+          surface,
+          selectedSide,
+          Boolean(logoMorph)
+        )
   const selectedBodyPath = (() => {
     if (!bodyEditing || !selectedBodyNodeId) return null
     return findBodyNodePath(scene, selectedBodyNodeId)
@@ -647,9 +652,9 @@ export function AvatarCanvas({
       ? applyAvatarEyeDefaults(renderedExpression, avatarEyes)
       : renderedExpression
     const livePose = poseWithAvatarEyes(renderedExpression, avatarEyes)
-    const liveEditor = renderEyeEditor(livePose, surface, selectedSide)
-    const leftEditor = renderEyeEditor(livePose, surface, -1)
-    const rightEditor = renderEyeEditor(livePose, surface, 1)
+    const liveEditor = renderEyeEditor(livePose, surface, selectedSide, Boolean(logoMorph))
+    const leftEditor = renderEyeEditor(livePose, surface, -1, Boolean(logoMorph))
+    const rightEditor = renderEyeEditor(livePose, surface, 1, Boolean(logoMorph))
     drag.current = {
       type,
       side: selectedSide,

@@ -1,5 +1,10 @@
 import { createBodyNode } from '@/features/avatar/body'
-import { centerFaceExpression, renderAvatar, poseFromExpression } from '@/features/avatar/geometry'
+import {
+  centerFaceExpression,
+  renderAvatar,
+  poseFromExpression,
+  renderEyeEditor,
+} from '@/features/avatar/geometry'
 import { defaultExpression } from '@/features/avatar/presets'
 import {
   createRenderedColors,
@@ -106,6 +111,21 @@ describe('rendered avatar scene', () => {
 
     paintRenderedScene(scene, turned)
     expect(scene.faceClipPath.get()).toBe(turned.faceClipPath)
+  })
+
+  it('projects the Bible Strong eyes onto an invisible spherical rig', () => {
+    const avatar = defaultStudioDocument.library.avatars.find(item => item.name === 'Bible Strong')!
+    const pose = poseFromExpression({ ...defaultExpression, headX: 18, headY: 38 })
+    const flat = renderAvatar(pose, avatar.body.primary as SurfaceConfig, 1)
+    const spherical = renderAvatar(pose, avatar.body.primary as SurfaceConfig, 1, {
+      bodyNodes: avatar.body.nodes as BodyNode[],
+    })
+    const editor = renderEyeEditor(pose, avatar.body.primary as SurfaceConfig, -1, true)
+
+    expect(spherical.headPath).toBe(flat.headPath)
+    expect(spherical.leftPath).not.toBe(flat.leftPath)
+    expect(spherical.rightPath).not.toBe(flat.rightPath)
+    expect(editor.selectionPath).toBe(spherical.leftPath)
   })
 
   it('anchors the face center while preserving animation expression changes', () => {

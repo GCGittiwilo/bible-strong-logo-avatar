@@ -565,10 +565,31 @@ const projectFacePoint = (
   pose: AvatarPose,
   surface: SurfaceConfig,
   x: number,
-  y: number
+  y: number,
+  useEyeSphere = false
 ): ProjectedSurfacePoint => {
   const [faceX, faceY] = canonicalFaceCoordinates(x, y)
-  return projectLocalSurfacePoint(pose, surfaceFrontSampleAt(surface, faceX, faceY))
+  if (!useEyeSphere) {
+    return projectLocalSurfacePoint(pose, surfaceFrontSampleAt(surface, faceX, faceY))
+  }
+
+  // The logo's eye rig lives on the front cap of an invisible sphere. Its front
+  // tangent stays aligned with the head surface while the rest of the globe sits
+  // behind it, so only the curved eye contours are ever rendered.
+  const radius = Math.max(surface.width, surface.height) * 0.64
+  const sphere: SurfaceConfig = {
+    type: 'sphere',
+    width: radius * 2,
+    height: radius * 2,
+    depth: radius * 2,
+    roundness: 1,
+  }
+  const sphereSample = surfaceFrontSampleAt(sphere, faceX, faceY)
+  const centerZ = surface.depth / 2 - radius
+  return projectLocalSurfacePoint(pose, {
+    point: [sphereSample.point[0], sphereSample.point[1], sphereSample.point[2] + centerZ],
+    normal: sphereSample.normal,
+  })
 }
 
 const eyePoints = (
@@ -576,7 +597,8 @@ const eyePoints = (
   surface: SurfaceConfig,
   side: -1 | 1,
   blink: number,
-  offset: Readonly<{ x: number; y: number }> = { x: 0, y: 0 }
+  offset: Readonly<{ x: number; y: number }> = { x: 0, y: 0 },
+  useEyeSphere = false
 ): ProjectedSurfacePoint[] => {
   const expression = pose.expression
   const suffix = side < 0 ? 'Left' : 'Right'
@@ -589,7 +611,7 @@ const eyePoints = (
   return roundedRectangle(width, height).map(([localX, localY]) => {
     const rotatedX = localX * Math.cos(angle) - localY * Math.sin(angle)
     const rotatedY = localX * Math.sin(angle) + localY * Math.cos(angle)
-    return projectFacePoint(pose, surface, centerX + rotatedX, centerY + rotatedY)
+    return projectFacePoint(pose, surface, centerX + rotatedX, centerY + rotatedY, useEyeSphere)
   })
 }
 
@@ -735,7 +757,8 @@ const projectEyePoint = (
   surface: SurfaceConfig,
   side: -1 | 1,
   localX: number,
-  localY: number
+  localY: number,
+  useEyeSphere = false
 ): Point3 => {
   const expression = pose.expression
   const suffix = side < 0 ? 'Left' : 'Right'
@@ -746,35 +769,45 @@ const projectEyePoint = (
     pose,
     surface,
     (side * expression.spacing) / 2 + expression[`positionX${suffix}`] + rotatedX,
-    expression[`positionY${suffix}`] + rotatedY
+    expression[`positionY${suffix}`] + rotatedY,
+    useEyeSphere
   ).point
 }
 
 export const renderEyeEditor = (
   pose: AvatarPose,
   surface: SurfaceConfig,
-  side: -1 | 1
+  side: -1 | 1,
+  useEyeSphere = false
 ): EyeEditorGeometry => {
   const expression = pose.expression
   const suffix = side < 0 ? 'Left' : 'Right'
   const width = expression[`width${suffix}`]
   const height = expression[`height${suffix}`]
-  const selectedSamples = eyePoints(pose, surface, side, 1)
+  const selectedSamples = eyePoints(pose, surface, side, 1, undefined, useEyeSphere)
   const selectedPoints = selectedSamples.map(sample => sample.point)
-  const center = projectEyePoint(pose, surface, side, 0, 0)
-  const widthHandle = projectEyePoint(pose, surface, side, width / 2 + 9, 0)
-  const heightHandle = projectEyePoint(pose, surface, side, 0, -height / 2 - 9)
-  const rotateHandle = projectEyePoint(pose, surface, side, 0, -height / 2 - 30)
-  const sizeHandle = projectEyePoint(pose, surface, side, width / 2 + 11, height / 2 + 11)
-  const leftCenter = projectEyePoint(pose, surface, -1, 0, 0)
-  const rightCenter = projectEyePoint(pose, surface, 1, 0, 0)
+  const center = projectEyePoint(pose, surface, side, 0, 0, useEyeSphere)
+  const widthHandle = projectEyePoint(pose, surface, side, width / 2 + 9, 0, useEyeSphere)
+  const heightHandle = projectEyePoint(pose, surface, side, 0, -height / 2 - 9, useEyeSphere)
+  const rotateHandle = projectEyePoint(pose, surface, side, 0, -height / 2 - 30, useEyeSphere)
+  const sizeHandle = projectEyePoint(
+    pose,
+    surface,
+    side,
+    width / 2 + 11,
+    height / 2 + 11,
+    useEyeSphere
+  )
+  const leftCenter = projectEyePoint(pose, surface, -1, 0, 0, useEyeSphere)
+  const rightCenter = projectEyePoint(pose, surface, 1, 0, 0, useEyeSphere)
   const spacingCenterX = (expression.positionXLeft + expression.positionXRight) / 2
   const spacingCenterY = (expression.positionYLeft + expression.positionYRight) / 2
   const spacingHandle = projectFacePoint(
     pose,
     surface,
     spacingCenterX,
-    spacingCenterY + height / 2 + 34
+    spacingCenterY + height / 2 + 34,
+    useEyeSphere
   ).point
   const spacingMiddle: Point3 = [
     (leftCenter[0] + rightCenter[0]) / 2,
@@ -1302,8 +1335,13 @@ const accessoryPath = (pose: AvatarPose, node: BodyNode) => {
 
 const ACCESSORY_FRONT_CROSSING_RATIO = 0.1
 
+const logoFrameNodes = (nodes: BodyNode[]) =>
+  nodes.filter(node => node.id.startsWith('logo-frame-'))
+
+const hasLogoEyeSphere = (nodes: BodyNode[]) => logoFrameNodes(nodes).length >= 4
+
 const logoFrameFaceClipPath = (pose: AvatarPose, nodes: BodyNode[]) => {
-  const frameNodes = nodes.filter(node => node.id.startsWith('logo-frame-'))
+  const frameNodes = logoFrameNodes(nodes)
   const vertical = frameNodes.filter(node => node.surface.height > node.surface.width * 1.5)
   const horizontal = frameNodes.filter(node => node.surface.width > node.surface.height * 1.5)
   const leftNodes = vertical.filter(node => node.position[0] < 0)
@@ -1382,6 +1420,8 @@ export const renderAvatar = (
   blink = 1,
   options: RenderAvatarOptions = {}
 ): AvatarGeometry => {
+  const bodyNodes = options.bodyNodes ?? []
+  const useEyeSphere = hasLogoEyeSphere(bodyNodes)
   const facePose = options.faceForward
     ? poseFromExpression({
         ...centerFaceExpression(pose.expression),
@@ -1390,15 +1430,15 @@ export const renderAvatar = (
         headZ: 0,
       })
     : pose
-  const leftSamples = eyePoints(facePose, surface, -1, blink, options.eyeOffset)
-  const rightSamples = eyePoints(facePose, surface, 1, blink, options.eyeOffset)
+  const leftSamples = eyePoints(facePose, surface, -1, blink, options.eyeOffset, useEyeSphere)
+  const rightSamples = eyePoints(facePose, surface, 1, blink, options.eyeOffset, useEyeSphere)
   const left = leftSamples.map(sample => sample.point)
   const right = rightSamples.map(sample => sample.point)
-  const accessories = accessoryLayers(pose, options.bodyNodes ?? [])
+  const accessories = accessoryLayers(pose, bodyNodes)
   const compositePaths = compositeBackPaths(pose, surface)
   const mouth = comicMouthGeometry(facePose, surface, options.mouth, options.mouthPose)
   const resolvedHeadPath = headPath(pose, surface)
-  const logoFaceClipPath = logoFrameFaceClipPath(pose, options.bodyNodes ?? [])
+  const logoFaceClipPath = logoFrameFaceClipPath(pose, bodyNodes)
   return {
     backPaths: [...compositePaths, ...accessories.backPaths],
     frontPaths: accessories.frontPaths,
