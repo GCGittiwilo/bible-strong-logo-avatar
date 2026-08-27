@@ -91,6 +91,8 @@ export type RenderAvatarOptions = {
   mouth?: AvatarMouth
   mouthPose?: ComicMouthPose
   faceForward?: boolean
+  /** Continuous 0..1 blend from head-attached face to camera-locked face. */
+  faceForwardAmount?: number
 }
 
 export type EyeEditorGeometry = {
@@ -1437,14 +1439,32 @@ export const renderAvatar = (
 ): AvatarGeometry => {
   const bodyNodes = options.bodyNodes ?? []
   const useEyeSphere = hasLogoEyeSphere(bodyNodes)
-  const facePose = options.faceForward
-    ? poseFromExpression({
-        ...centerFaceExpression(pose.expression),
-        headX: 0,
-        headY: 0,
-        headZ: 0,
-      })
-    : pose
+  const faceForwardAmount = Math.max(
+    0,
+    Math.min(1, options.faceForwardAmount ?? (options.faceForward ? 1 : 0))
+  )
+  const centeredFace = centerFaceExpression(pose.expression)
+  const blendFaceField = (attached: number, locked: number) =>
+    attached + (locked - attached) * faceForwardAmount
+  const facePose =
+    faceForwardAmount > 0
+      ? poseFromExpression({
+          ...pose.expression,
+          headX: pose.expression.headX * (1 - faceForwardAmount),
+          headY: pose.expression.headY * (1 - faceForwardAmount),
+          headZ: pose.expression.headZ * (1 - faceForwardAmount),
+          positionXLeft: blendFaceField(pose.expression.positionXLeft, centeredFace.positionXLeft),
+          positionXRight: blendFaceField(
+            pose.expression.positionXRight,
+            centeredFace.positionXRight
+          ),
+          positionYLeft: blendFaceField(pose.expression.positionYLeft, centeredFace.positionYLeft),
+          positionYRight: blendFaceField(
+            pose.expression.positionYRight,
+            centeredFace.positionYRight
+          ),
+        })
+      : pose
   const leftSamples = eyePoints(facePose, surface, -1, blink, options.eyeOffset, useEyeSphere)
   const rightSamples = eyePoints(facePose, surface, 1, blink, options.eyeOffset, useEyeSphere)
   const left = leftSamples.map(sample => sample.point)

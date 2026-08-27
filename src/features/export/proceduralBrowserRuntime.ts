@@ -103,9 +103,8 @@ function mountAvatar(target, options = {}) {
   let cursorDesiredTarget = { x: 0, y: 0 };
   let cursorRenderedTarget = { x: 0, y: 0 };
   let cursorLastFrame = -1;
-  let preserveAttachedFace = false;
   const faceForwardForAnimation = () => Boolean(
-    DATA.avatar.faceForward && !manualGazeTarget && !preserveAttachedFace && DATA.animations[currentAnimation]?.faceMode !== 'attached'
+    DATA.avatar.faceForward && !manualGazeTarget && DATA.animations[currentAnimation]?.faceMode !== 'attached'
   );
   const gazeProfileForAnimation = () => {
     const animation = DATA.animations[currentAnimation];
@@ -124,6 +123,7 @@ function mountAvatar(target, options = {}) {
   let blinkAmount = 1;
   let transitionState = null;
   let blinkState = null;
+  let blinkReleaseState = null;
   let frameRequest = null;
   let stepTimer = null;
   let blinkTimer = null;
@@ -151,9 +151,14 @@ function mountAvatar(target, options = {}) {
   let lastRenderedGaze = null;
   let gazeBlendFrom = null;
   let gazeBlendStartedAt = -1;
-  let gazeReleaseFrom = null;
-  let gazeReleaseStartedAt = -1;
-  let gazeReleaseDurationMs = 680;
+  let lastRenderedExpression = { ...initialExpression };
+  let lastRenderedEyeOffset = { x: 0, y: 0 };
+  let lastRenderedStageOffset = {
+    x: initialExpression.stageX || 0,
+    y: initialExpression.stageY || 0,
+  };
+  let lastRenderedFaceForwardAmount = faceForwardForAnimation() ? 1 : 0;
+  let visualHandoff = null;
   const faceMotionExpression = { ...initialExpression, headX: 0, headY: 0, headZ: 0 };
   let eyeAmbientSignature = initialExpression.eyeMotion;
   let bodyAmbientSignature = initialExpression.bodyMotion;
@@ -167,6 +172,21 @@ function mountAvatar(target, options = {}) {
   let faceProgress = DATA.avatar.logoMorph ? (options.face === true ? 1 : 0) : 1;
   let faceTransition = null;
   if (talking || thinking) faceProgress = 1;
+
+  const beginVisualHandoff = durationMs => {
+    if (reducedMotion) {
+      visualHandoff = null;
+      return;
+    }
+    visualHandoff = {
+      fromExpression: { ...lastRenderedExpression },
+      fromEyeOffset: { ...lastRenderedEyeOffset },
+      fromStageOffset: { ...lastRenderedStageOffset },
+      fromFaceForwardAmount: lastRenderedFaceForwardAmount,
+      startedAt: -1,
+      durationMs: Math.max(durationMs, 1),
+    };
+  };
 
   const applyMotion = expression => {
     const now = performance.now();
@@ -205,20 +225,6 @@ function mountAvatar(target, options = {}) {
     if (gaze && DATA.animations[currentAnimation]?.group === 'Animations') {
       gaze = { ...gaze, headBaseWeight: 1 };
     }
-    if (gaze && gazeReleaseFrom) gazeReleaseFrom = null;
-    if (!gaze && gazeReleaseFrom) {
-      if (gazeReleaseStartedAt < 0) gazeReleaseStartedAt = time;
-      const releaseProgress = clamp01((time - gazeReleaseStartedAt) / gazeReleaseDurationMs);
-      gaze = AvatarProceduralEngine.blendCoordinatedGaze(
-        gazeReleaseFrom,
-        AvatarProceduralEngine.solveGazeRig({ x: 0, y: 0 }, 1, 1),
-        releaseProgress
-      );
-      if (releaseProgress >= 1) {
-        gazeReleaseFrom = null;
-        gazeReleaseStartedAt = -1;
-      }
-    }
     if (gaze && gazeBlendFrom) {
       if (gazeBlendStartedAt < 0) gazeBlendStartedAt = time;
       const gazeBlendProgress = clamp01((time - gazeBlendStartedAt) / 520);
@@ -229,10 +235,11 @@ function mountAvatar(target, options = {}) {
       }
     }
     lastRenderedGaze = gaze;
-    const expression = gaze
+    let expression = gaze
       ? AvatarProceduralEngine.applyCoordinatedGaze(ambientExpression, gaze)
       : ambientExpression;
     const faceForward = faceForwardForAnimation();
+    let faceForwardAmount = faceForward ? 1 : 0;
     const eyeMotionExpression = faceForward
       ? { ...faceMotionExpression, eyeMotion: currentPose.expression.eyeMotion }
       : currentPose.expression;
@@ -241,10 +248,42 @@ function mountAvatar(target, options = {}) {
       eyeElapsed,
       faceForward ? 1 : ambientStrength
     );
-    const eyeOffset = {
+    let eyeOffset = {
       x: ambientEyeOffset.x + (gaze?.eyeOffset.x || 0),
       y: ambientEyeOffset.y + (gaze?.eyeOffset.y || 0),
     };
+    const proceduralOffset = AvatarProceduralEngine.ambientBodyOffset(currentPose.expression, bodyElapsed, ambientStrength);
+    let offset = {
+      x: (currentPose.expression.stageX || 0) + proceduralOffset.x,
+      y: (currentPose.expression.stageY || 0) + proceduralOffset.y,
+    };
+    if (visualHandoff) {
+      if (visualHandoff.startedAt < 0) visualHandoff.startedAt = time;
+      const linear = clamp01((time - visualHandoff.startedAt) / visualHandoff.durationMs);
+      const progress = linear * linear * (3 - 2 * linear);
+      const target = resolvedTargetExpression(expression, visualHandoff.fromExpression);
+      const blended = { ...target };
+      AvatarProceduralEngine.expressionFields.forEach(field => {
+        blended[field] = visualHandoff.fromExpression[field] +
+          (target[field] - visualHandoff.fromExpression[field]) * progress;
+      });
+      expression = blended;
+      eyeOffset = {
+        x: visualHandoff.fromEyeOffset.x + (eyeOffset.x - visualHandoff.fromEyeOffset.x) * progress,
+        y: visualHandoff.fromEyeOffset.y + (eyeOffset.y - visualHandoff.fromEyeOffset.y) * progress,
+      };
+      offset = {
+        x: visualHandoff.fromStageOffset.x + (offset.x - visualHandoff.fromStageOffset.x) * progress,
+        y: visualHandoff.fromStageOffset.y + (offset.y - visualHandoff.fromStageOffset.y) * progress,
+      };
+      faceForwardAmount = visualHandoff.fromFaceForwardAmount +
+        (faceForwardAmount - visualHandoff.fromFaceForwardAmount) * progress;
+      if (linear >= 1) visualHandoff = null;
+    }
+    lastRenderedExpression = { ...expression };
+    lastRenderedEyeOffset = { ...eyeOffset };
+    lastRenderedStageOffset = { ...offset };
+    lastRenderedFaceForwardAmount = faceForwardAmount;
     const renderedPose = AvatarProceduralEngine.poseFromExpression(expression);
     const geometry = AvatarProceduralEngine.renderAvatar(renderedPose, DATA.avatar.surface, blinkAmount, {
       includeWire: false,
@@ -252,17 +291,13 @@ function mountAvatar(target, options = {}) {
       eyeOffset,
       mouth: DATA.avatar.mouth,
       faceForward,
+      faceForwardAmount,
       mouthPose: talking
         ? AvatarProceduralEngine.comicTalkingMouthPoseAt(time - talkingStartedAt, reducedMotion)
         : thinking
           ? AvatarProceduralEngine.comicThinkingMouthPoseAt(time - thinkingStartedAt, reducedMotion)
         : undefined,
     });
-    const proceduralOffset = AvatarProceduralEngine.ambientBodyOffset(currentPose.expression, bodyElapsed, ambientStrength);
-    const offset = {
-      x: (currentPose.expression.stageX || 0) + proceduralOffset.x,
-      y: (currentPose.expression.stageY || 0) + proceduralOffset.y,
-    };
     motionLayer.setAttribute(
       'transform',
       'translate(' + offset.x + ' ' + offset.y + ')'
@@ -332,10 +367,6 @@ function mountAvatar(target, options = {}) {
       if (linear >= 1) {
         faceProgress = faceTransition.to;
         faceTransition = null;
-        if (faceProgress <= 0.001 && preserveAttachedFace) {
-          preserveAttachedFace = false;
-          syncFaceClip();
-        }
       }
     }
     if (transitionState) {
@@ -375,12 +406,21 @@ function mountAvatar(target, options = {}) {
         blinkState = null;
       }
     }
+    if (blinkReleaseState) {
+      const progress = clamp01((time - blinkReleaseState.startedAt) / blinkReleaseState.durationMs);
+      const eased = progress * progress * (3 - 2 * progress);
+      blinkAmount = blinkReleaseState.from + (1 - blinkReleaseState.from) * eased;
+      if (progress >= 1) {
+        blinkAmount = 1;
+        blinkReleaseState = null;
+      }
+    }
     const ambientActive = AvatarProceduralEngine.hasAmbientMotion(currentPose.expression);
     const gazeActive = Boolean(activeGazeProfile) && !reducedMotion && (playing || liveGaze);
     // requestAnimationFrame already synchronizes this loop to the display. Do
     // not halve a 60 Hz display to 30 FPS by throttling continuous motion here.
     render(time);
-    if (faceTransition || transitionState || blinkState || ambientActive || gazeActive || gazeReleaseFrom || talking || thinking || cursorFollowActive) frameRequest = requestAnimationFrame(tick);
+    if (faceTransition || transitionState || blinkState || blinkReleaseState || ambientActive || gazeActive || visualHandoff || talking || thinking || cursorFollowActive) frameRequest = requestAnimationFrame(tick);
   };
   const requestTick = () => {
     if (frameRequest === null) frameRequest = requestAnimationFrame(tick);
@@ -398,6 +438,10 @@ function mountAvatar(target, options = {}) {
   const animateTo = (expressionId, durationMs, transition) => {
     const target = DATA.expressions[expressionId];
     if (!target) return;
+    durationMs = reducedMotion ? 0 : Math.max(Number(durationMs) || 0, 180);
+    const motionLayerChanges = currentPose.expression.bodyMotion !== target.bodyMotion ||
+      currentPose.expression.eyeMotion !== target.eyeMotion;
+    if (motionLayerChanges && !visualHandoff) beginVisualHandoff(durationMs);
     applyMotion(target);
     const resolved = resolvedTargetExpression(target, currentPose.expression);
     const targetPose = AvatarProceduralEngine.poseFromExpression(resolved);
@@ -444,6 +488,7 @@ function mountAvatar(target, options = {}) {
     blinkDueAt = performance.now() + delay;
     blinkTimer = setTimeout(() => {
       blinkDueAt = null;
+      blinkReleaseState = null;
       blinkState = { startedAt: performance.now(), durationMs: animation.blink.durationMs };
       requestTick();
       const range = animation.blink.maxIntervalMs - animation.blink.minIntervalMs;
@@ -456,6 +501,11 @@ function mountAvatar(target, options = {}) {
     if (playbackMode === 'once' && stepIndex >= last) {
       playing = false;
       liveGaze = animation.group === 'Animations';
+      if (!liveGaze) {
+        beginVisualHandoff(420);
+        activeGazeProfile = null;
+        requestTick();
+      }
       options.onAnimationEnd?.(currentAnimation);
       if (liveGaze) requestTick();
       return;
@@ -467,11 +517,13 @@ function mountAvatar(target, options = {}) {
     } else stepIndex = (stepIndex + 1) % (last + 1);
     runStep(animation);
   };
-  const runStep = animation => {
+  const runStep = (animation, entryTransition) => {
     if (!playing || !animation.steps.length) return;
     const step = animation.steps[stepIndex];
-    animateTo(step.expressionId, step.transitionMs, step.transition);
-    const duration = step.transitionMs + step.holdMs;
+    const transitionMs = entryTransition?.transitionMs ?? step.transitionMs;
+    const transition = entryTransition?.transition ?? step.transition;
+    animateTo(step.expressionId, transitionMs, transition);
+    const duration = (reducedMotion ? 0 : Math.max(transitionMs, 180)) + step.holdMs;
     stepDueAt = performance.now() + duration;
     stepTimer = setTimeout(() => advance(animation), duration);
   };
@@ -524,8 +576,9 @@ function mountAvatar(target, options = {}) {
             }, 720);
             return;
           }
-          animateTo(step.expressionId, step.transitionMs, step.transition);
-          autonomousStepTimer = setTimeout(playActionStep, step.transitionMs + step.holdMs);
+          const transitionMs = reducedMotion ? 0 : Math.max(step.transitionMs, 180);
+          animateTo(step.expressionId, transitionMs, step.transition);
+          autonomousStepTimer = setTimeout(playActionStep, transitionMs + step.holdMs);
         };
         playActionStep();
       }, delay);
@@ -587,10 +640,13 @@ function mountAvatar(target, options = {}) {
         return api;
       }
       const cursorWasActive = cursorFollowActive;
+      const requestedAnimation = DATA.animations[animationName];
+      const entryTransitionMs = Math.max(requestedAnimation.steps[0]?.transitionMs || 500, 680);
+      beginVisualHandoff(entryTransitionMs);
       const previousGazeProfile = activeGazeProfile;
-      const requestedGazeProfile = DATA.animations[animationName].presentation === 'logo' || DATA.animations[animationName].gazeProfile === 'none'
+      const requestedGazeProfile = requestedAnimation.presentation === 'logo' || requestedAnimation.gazeProfile === 'none'
         ? null
-        : (DATA.animations[animationName].gazeProfile || 'attentive');
+        : (requestedAnimation.gazeProfile || 'attentive');
       const nextGazeProfile = requestedGazeProfile;
       if (previousGazeProfile !== nextGazeProfile) {
         gazeBlendFrom = lastRenderedGaze;
@@ -605,26 +661,12 @@ function mountAvatar(target, options = {}) {
       cursorFollowActive = Boolean(animation.driver);
       cursorLastFrame = -1;
       if (cursorFollowActive) {
-        gazeReleaseFrom = null;
-        gazeReleaseStartedAt = -1;
-        preserveAttachedFace = false;
         if (!cursorWasActive) {
           cursorDesiredTarget = { x: 0, y: 0 };
           cursorRenderedTarget = { x: 0, y: 0 };
         }
         manualGazeTarget = cursorRenderedTarget;
       } else {
-        if (cursorWasActive && lastRenderedGaze) {
-          gazeReleaseFrom = lastRenderedGaze;
-          gazeReleaseStartedAt = -1;
-          gazeReleaseDurationMs = Math.max(animation.steps[0]?.transitionMs || 500, 680);
-        } else {
-          gazeReleaseFrom = null;
-          gazeReleaseStartedAt = -1;
-        }
-        preserveAttachedFace = Boolean(
-          cursorWasActive && animation.presentation === 'logo' && faceProgress > 0.001
-        );
         manualGazeTarget = null;
       }
       syncFaceClip();
@@ -637,7 +679,7 @@ function mountAvatar(target, options = {}) {
       playing = true;
       if (animation.driver === 'cursor') {
         const first = animation.steps[0];
-        if (first) animateTo(first.expressionId, first.transitionMs, first.transition);
+        if (first) animateTo(first.expressionId, entryTransitionMs, 'smooth');
         scheduleBlink(animation, animation.blink.initialDelayMs);
         requestTick();
         return api;
@@ -648,7 +690,7 @@ function mountAvatar(target, options = {}) {
         requestTick();
         return api;
       }
-      runStep(animation);
+      runStep(animation, { transitionMs: entryTransitionMs, transition: 'smooth' });
       scheduleBlink(animation, animation.blink.initialDelayMs);
       return api;
     },
@@ -675,7 +717,7 @@ function mountAvatar(target, options = {}) {
       transitionState = null;
       blinkState = null;
       cursorFollowActive = false;
-      manualGazeTarget = null;
+      if (DATA.animations[currentAnimation]?.driver) manualGazeTarget = cursorRenderedTarget;
       paused = true;
       playing = false;
       liveGaze = false;
@@ -683,10 +725,13 @@ function mountAvatar(target, options = {}) {
       return api;
     },
     stop() {
+      beginVisualHandoff(520);
       clearSchedule();
       transitionState = null;
       blinkState = null;
-      blinkAmount = 1;
+      blinkReleaseState = blinkAmount < 0.999
+        ? { from: blinkAmount, startedAt: performance.now(), durationMs: 220 }
+        : null;
       pausedBlink = null;
       pausedBlinkDelay = 0;
       paused = false;
@@ -698,15 +743,12 @@ function mountAvatar(target, options = {}) {
       lastRenderedGaze = null;
       gazeBlendFrom = null;
       gazeBlendStartedAt = -1;
-      gazeReleaseFrom = null;
-      gazeReleaseStartedAt = -1;
-      preserveAttachedFace = false;
       gazeStartedAt = performance.now();
       gazePausedAt = null;
       stepIndex = 0;
       direction = 1;
       const first = DATA.animations[currentAnimation].steps[0];
-      if (first) animateTo(first.expressionId, 0, first.transition);
+      if (first) animateTo(first.expressionId, 520, 'smooth');
       return api;
     },
     setTalking(next) {
@@ -721,11 +763,13 @@ function mountAvatar(target, options = {}) {
       return api;
     },
     setGaze(x, y) {
+      beginVisualHandoff(x === null || x === undefined ? 420 : 240);
       manualGazeTarget = x === null || x === undefined
         ? null
         : { x: Math.max(-1, Math.min(1, Number(x) || 0)), y: Math.max(-1, Math.min(1, Number(y) || 0)) };
       syncFaceClip();
       render();
+      requestTick();
       return api;
     },
     startTalking() { return api.setTalking(true); },
@@ -753,7 +797,6 @@ function mountAvatar(target, options = {}) {
       if (reducedMotion || durationMs <= 0) {
         faceTransition = null;
         faceProgress = target;
-        if (!target) preserveAttachedFace = false;
         syncFaceClip();
         render();
         return api;

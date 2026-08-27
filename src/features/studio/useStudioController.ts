@@ -34,6 +34,7 @@ import {
   pickDifferent,
   randomBetween,
 } from '@/features/animation/interactive'
+import { blendVisibleRigState } from '@/features/animation/rigTransition'
 import {
   createSequence,
   duplicateSequence,
@@ -341,6 +342,7 @@ export function useStudioController() {
   const { pose: initialPose, geometry: initialGeometry } = initialRender
   const displayedPose = useRef<AvatarPose>(initialPose)
   const transitionFrame = useRef<number | null>(null)
+  const handoffFrame = useRef<number | null>(null)
   const ambientFrame = useRef<number | null>(null)
   const talkingFrame = useRef<number | null>(null)
   const talkingStartedAt = useRef(0)
@@ -355,9 +357,15 @@ export function useStudioController() {
   const bodyAmbientSignature = useRef('none')
   const lastAmbientStrength = useRef(1)
   const lastAmbientExpression = useRef<Expression>({ ...initialExpression })
+  const lastRenderedExpression = useRef<Expression>({ ...initialExpression })
+  const lastRenderedEyeOffset = useRef({ x: 0, y: 0 })
   const lastRenderedOffset = useRef({ x: 0, y: 0 })
-  const sequenceOffsetBridge = useRef<{
-    from: { x: number; y: number }
+  const lastRenderedFaceForwardAmount = useRef(initialAvatar.faceForward ? 1 : 0)
+  const visualHandoff = useRef<{
+    fromExpression: Expression
+    fromEyeOffset: { x: number; y: number }
+    fromStageOffset: { x: number; y: number }
+    fromFaceForwardAmount: number
     startedAt: number
     durationMs: number
   } | null>(null)
@@ -366,12 +374,6 @@ export function useStudioController() {
   const lastRenderedGaze = useRef<CoordinatedGaze | null>(null)
   const gazeBlendFrom = useRef<CoordinatedGaze | null>(null)
   const gazeBlendStartedAt = useRef(-1)
-  const gazeRelease = useRef<{
-    from: CoordinatedGaze
-    startedAt: number
-    durationMs: number
-  } | null>(null)
-  const deferredFaceForward = useRef<boolean | null>(null)
   const transitionTarget = useRef<Expression>({ ...initialExpression })
   const canonicalTarget = useRef<Expression>({ ...initialExpression })
   const retargetFrom = useRef<Expression | null>(null)
@@ -415,6 +417,31 @@ export function useStudioController() {
     eyeAmbientSignature.current = 'none'
   }
 
+  const startVisualHandoff = (durationMs: number) => {
+    if (reduceMotion) {
+      visualHandoff.current = null
+      return
+    }
+    visualHandoff.current = {
+      fromExpression: { ...lastRenderedExpression.current },
+      fromEyeOffset: { ...lastRenderedEyeOffset.current },
+      fromStageOffset: { ...lastRenderedOffset.current },
+      fromFaceForwardAmount: lastRenderedFaceForwardAmount.current,
+      startedAt: -1,
+      durationMs: Math.max(durationMs, 1),
+    }
+    if (handoffFrame.current !== null) cancelAnimationFrame(handoffFrame.current)
+    const tick = (time: number) => {
+      if (transitionFrame.current === null) paintPose(displayedPose.current, undefined, time)
+      if (visualHandoff.current) {
+        handoffFrame.current = requestAnimationFrame(tick)
+      } else {
+        handoffFrame.current = null
+      }
+    }
+    handoffFrame.current = requestAnimationFrame(tick)
+  }
+
   const paintPose = (
     pose: AvatarPose,
     blink?: number,
@@ -422,6 +449,7 @@ export function useStudioController() {
     ambientStrength?: number
   ) => {
     displayedPose.current = pose
+    const resolvedFrameTime = frameTimeMs ?? performance.now()
     const resolvedAmbientStrength =
       ambientStrength ?? (transitionFrame.current === null ? 1 : lastAmbientStrength.current)
     lastAmbientStrength.current = resolvedAmbientStrength
@@ -446,19 +474,19 @@ export function useStudioController() {
       bodyAmbientStartedAt.current = -1
       lastBodyAmbientElapsed.current = 0
     }
-    if (eyeAmbientEnabled && frameTimeMs !== undefined) {
-      if (eyeAmbientStartedAt.current < 0) eyeAmbientStartedAt.current = frameTimeMs
-      lastEyeAmbientElapsed.current = frameTimeMs - eyeAmbientStartedAt.current
+    if (eyeAmbientEnabled) {
+      if (eyeAmbientStartedAt.current < 0) eyeAmbientStartedAt.current = resolvedFrameTime
+      lastEyeAmbientElapsed.current = resolvedFrameTime - eyeAmbientStartedAt.current
     }
-    if (bodyAmbientEnabled && frameTimeMs !== undefined) {
-      if (bodyAmbientStartedAt.current < 0) bodyAmbientStartedAt.current = frameTimeMs
-      lastBodyAmbientElapsed.current = frameTimeMs - bodyAmbientStartedAt.current
+    if (bodyAmbientEnabled) {
+      if (bodyAmbientStartedAt.current < 0) bodyAmbientStartedAt.current = resolvedFrameTime
+      lastBodyAmbientElapsed.current = resolvedFrameTime - bodyAmbientStartedAt.current
     }
     const gazeProfile = activeGazeProfileRef.current
-    if (cursorFollowActiveRef.current && frameTimeMs !== undefined) {
+    if (cursorFollowActiveRef.current) {
       const elapsed =
-        cursorLastFrame.current < 0 ? 16 : Math.min(frameTimeMs - cursorLastFrame.current, 50)
-      cursorLastFrame.current = frameTimeMs
+        cursorLastFrame.current < 0 ? 16 : Math.min(resolvedFrameTime - cursorLastFrame.current, 50)
+      cursorLastFrame.current = resolvedFrameTime
       const blend = 1 - Math.exp(-elapsed / 72)
       cursorRenderedTarget.current = {
         x:
@@ -471,9 +499,10 @@ export function useStudioController() {
       manualGazeTargetRef.current = cursorRenderedTarget.current
     }
     const gazeTarget = manualGazeTargetRef.current
-    if (gazeProfile && frameTimeMs !== undefined) {
-      if (gazeStartedAt.current < 0) gazeStartedAt.current = frameTimeMs - lastGazeElapsed.current
-      lastGazeElapsed.current = frameTimeMs - gazeStartedAt.current
+    if (gazeProfile) {
+      if (gazeStartedAt.current < 0)
+        gazeStartedAt.current = resolvedFrameTime - lastGazeElapsed.current
+      lastGazeElapsed.current = resolvedFrameTime - gazeStartedAt.current
     }
     const rawGaze = gazeTarget
       ? solveGazeRig(gazeTarget, 1)
@@ -484,17 +513,9 @@ export function useStudioController() {
     if (gaze && activeSequenceRef.current?.group === 'Animations') {
       gaze = { ...gaze, headBaseWeight: 1 }
     }
-    if (gaze && gazeRelease.current) gazeRelease.current = null
-    const release = gazeRelease.current
-    if (!gaze && release && frameTimeMs !== undefined) {
-      if (release.startedAt < 0) release.startedAt = frameTimeMs
-      const progress = Math.min((frameTimeMs - release.startedAt) / release.durationMs, 1)
-      gaze = blendCoordinatedGaze(release.from, solveGazeRig({ x: 0, y: 0 }, 1, 1), progress)
-      if (progress >= 1) gazeRelease.current = null
-    }
-    if (gaze && gazeBlendFrom.current && frameTimeMs !== undefined) {
-      if (gazeBlendStartedAt.current < 0) gazeBlendStartedAt.current = frameTimeMs
-      const progress = Math.min((frameTimeMs - gazeBlendStartedAt.current) / 520, 1)
+    if (gaze && gazeBlendFrom.current) {
+      if (gazeBlendStartedAt.current < 0) gazeBlendStartedAt.current = resolvedFrameTime
+      const progress = Math.min((resolvedFrameTime - gazeBlendStartedAt.current) / 520, 1)
       gaze = blendCoordinatedGaze(gazeBlendFrom.current, gaze, progress)
       if (progress >= 1) {
         gazeBlendFrom.current = null
@@ -510,10 +531,9 @@ export function useStudioController() {
         )
       : pose.expression
     lastAmbientExpression.current = { ...ambientExpression }
-    const renderedExpression = gaze
+    let renderedExpression = gaze
       ? applyCoordinatedGaze(ambientExpression, gaze)
       : ambientExpression
-    paintRenderedRotationGizmo(renderedRotationGizmo, renderedExpression)
     const ambientEye = eyeAmbientEnabled
       ? ambientEyeOffset(
           eyeExpression,
@@ -521,10 +541,52 @@ export function useStudioController() {
           faceForward ? 1 : resolvedAmbientStrength
         )
       : { x: 0, y: 0 }
-    const eyeOffset = {
+    let eyeOffset = {
       x: ambientEye.x + (gaze?.eyeOffset.x ?? 0),
       y: ambientEye.y + (gaze?.eyeOffset.y ?? 0),
     }
+    const proceduralOffset = bodyAmbientEnabled
+      ? ambientBodyOffset(pose.expression, lastBodyAmbientElapsed.current, resolvedAmbientStrength)
+      : { x: 0, y: 0 }
+    const ambientOffset = {
+      x: pose.expression.stageX + proceduralOffset.x,
+      y: pose.expression.stageY + proceduralOffset.y,
+    }
+    let renderedOffset = ambientOffset
+    let faceForwardAmount = faceForward ? 1 : 0
+    const handoff = visualHandoff.current
+    if (handoff) {
+      if (handoff.startedAt < 0) handoff.startedAt = resolvedFrameTime
+      const linearProgress = Math.min(
+        (resolvedFrameTime - handoff.startedAt) / handoff.durationMs,
+        1
+      )
+      const blended = blendVisibleRigState(
+        {
+          expression: handoff.fromExpression,
+          eyeOffset: handoff.fromEyeOffset,
+          stageOffset: handoff.fromStageOffset,
+          faceForwardAmount: handoff.fromFaceForwardAmount,
+        },
+        {
+          expression: renderedExpression,
+          eyeOffset,
+          stageOffset: ambientOffset,
+          faceForwardAmount,
+        },
+        linearProgress
+      )
+      renderedExpression = blended.expression
+      eyeOffset = blended.eyeOffset
+      renderedOffset = blended.stageOffset
+      faceForwardAmount = blended.faceForwardAmount
+      if (linearProgress >= 1) visualHandoff.current = null
+    }
+    lastRenderedExpression.current = { ...renderedExpression }
+    lastRenderedEyeOffset.current = { ...eyeOffset }
+    lastRenderedOffset.current = { ...renderedOffset }
+    lastRenderedFaceForwardAmount.current = faceForwardAmount
+    paintRenderedRotationGizmo(renderedRotationGizmo, renderedExpression)
     const renderPose = avatar
       ? poseWithAvatarEyes(renderedExpression, avatar.eyes ?? defaultAvatarEyes)
       : poseFromExpression(renderedExpression)
@@ -534,14 +596,15 @@ export function useStudioController() {
       eyeOffset,
       mouth: avatar?.mouth,
       faceForward,
+      faceForwardAmount,
       mouthPose: talking
         ? comicTalkingMouthPoseAt(
-            (frameTimeMs ?? performance.now()) - talkingStartedAt.current,
+            resolvedFrameTime - talkingStartedAt.current,
             Boolean(reduceMotion)
           )
         : thinking
           ? comicThinkingMouthPoseAt(
-              (frameTimeMs ?? performance.now()) - thinkingStartedAt.current,
+              resolvedFrameTime - thinkingStartedAt.current,
               Boolean(reduceMotion)
             )
           : undefined,
@@ -550,29 +613,6 @@ export function useStudioController() {
     // only needed while that effect is actually visible.
     paintRenderedScene(renderedScene, geometry, thinking)
     paintRenderedLogoMorph(renderedScene, avatar?.logoMorph, faceReveal.get())
-    const proceduralOffset = bodyAmbientEnabled
-      ? ambientBodyOffset(pose.expression, lastBodyAmbientElapsed.current, resolvedAmbientStrength)
-      : { x: 0, y: 0 }
-    const ambientOffset = {
-      x: pose.expression.stageX + proceduralOffset.x,
-      y: pose.expression.stageY + proceduralOffset.y,
-    }
-    const bridge = sequenceOffsetBridge.current
-    let renderedOffset = ambientOffset
-    if (bridge) {
-      if (bridge.startedAt < 0 && frameTimeMs !== undefined) bridge.startedAt = frameTimeMs
-      const linearProgress =
-        frameTimeMs === undefined || bridge.startedAt < 0
-          ? 0
-          : Math.min((frameTimeMs - bridge.startedAt) / bridge.durationMs, 1)
-      const progress = linearProgress * linearProgress * (3 - 2 * linearProgress)
-      renderedOffset = {
-        x: bridge.from.x + (ambientOffset.x - bridge.from.x) * progress,
-        y: bridge.from.y + (ambientOffset.y - bridge.from.y) * progress,
-      }
-      if (linearProgress >= 1) sequenceOffsetBridge.current = null
-    }
-    lastRenderedOffset.current = renderedOffset
     paintRenderedOffset(renderedScene, renderedOffset)
   }
 
@@ -585,6 +625,7 @@ export function useStudioController() {
           y: Math.max(-1, Math.min(1, target.y)),
         }
       : null
+    startVisualHandoff(next ? 180 : 420)
     manualGazeTargetRef.current = next
     setManualGazeTargetState(next)
     const avatar = avatarsRef.current.find(item => item.id === activeAvatarIdRef.current)
@@ -599,13 +640,12 @@ export function useStudioController() {
       y: Math.max(-1, Math.min(1, target.y)),
     }
   }
-  const updateCursorFollowEnabled = (next: boolean, releaseDurationMs?: number) => {
+  const updateCursorFollowEnabled = (next: boolean) => {
     const wasActive = cursorFollowActiveRef.current
     cursorFollowActiveRef.current = next
     setCursorFollowActive(next)
     cursorLastFrame.current = -1
     if (next) {
-      gazeRelease.current = null
       if (!wasActive) {
         cursorDesiredTarget.current = { x: 0, y: 0 }
         cursorRenderedTarget.current = { x: 0, y: 0 }
@@ -614,15 +654,6 @@ export function useStudioController() {
       setManualGazeTargetState(null)
       updateActiveFaceForward(false)
       return
-    }
-    if (wasActive && releaseDurationMs && lastRenderedGaze.current) {
-      gazeRelease.current = {
-        from: lastRenderedGaze.current,
-        startedAt: -1,
-        durationMs: Math.max(releaseDurationMs, 1),
-      }
-    } else {
-      gazeRelease.current = null
     }
     manualGazeTargetRef.current = null
     cursorDesiredTarget.current = { x: 0, y: 0 }
@@ -647,11 +678,6 @@ export function useStudioController() {
   useMotionValueEvent(faceReveal, 'change', latest => {
     const avatar = avatarsRef.current.find(item => item.id === activeAvatarIdRef.current)
     paintRenderedLogoMorph(renderedScene, avatar?.logoMorph, latest)
-    if (latest <= 0.001 && deferredFaceForward.current !== null) {
-      const nextFaceForward = deferredFaceForward.current
-      deferredFaceForward.current = null
-      updateActiveFaceForward(nextFaceForward)
-    }
   })
 
   const paintAmbientFrame = useEffectEvent((time: number) => {
@@ -710,6 +736,7 @@ export function useStudioController() {
   useEffect(
     () => () => {
       if (transitionFrame.current !== null) cancelAnimationFrame(transitionFrame.current)
+      if (handoffFrame.current !== null) cancelAnimationFrame(handoffFrame.current)
       if (talkingFrame.current !== null) cancelAnimationFrame(talkingFrame.current)
       if (cursorFollowFrame.current !== null) cancelAnimationFrame(cursorFollowFrame.current)
       blinkControls.current?.stop()
@@ -778,13 +805,16 @@ export function useStudioController() {
     transitionSettings?: Pick<SequenceStep, 'transitionMs' | 'transition'>
   ) => {
     if (!transitionSettings && statePlaying) pauseState()
-    sequenceTransitionRef.current = transitionSettings ?? {
-      transitionMs: 500,
-      transition: 'smooth',
-    }
+    const resolvedTransitionSettings = transitionSettings
+      ? {
+          ...transitionSettings,
+          transitionMs: reduceMotion ? 0 : Math.max(transitionSettings.transitionMs, 180),
+        }
+      : { transitionMs: 500, transition: 'smooth' as const }
+    sequenceTransitionRef.current = resolvedTransitionSettings
     setActiveExpression(index)
     const avatar = avatarsRef.current.find(item => item.id === activeAvatarIdRef.current)
-    if (reduceMotion || transitionSettings?.transitionMs === 0) {
+    if (reduceMotion) {
       updateImmediate(next, Boolean(transitionSettings))
       setActiveExpression(index)
       return
@@ -792,6 +822,9 @@ export function useStudioController() {
     const displayedExpression = displayedPose.current.expression
     const motionLayerChanges = displayedExpression.bodyMotion !== next.bodyMotion
     const current = motionLayerChanges ? lastAmbientExpression.current : displayedExpression
+    if (!visualHandoff.current && (!transitionSettings || motionLayerChanges)) {
+      startVisualHandoff(resolvedTransitionSettings.transitionMs)
+    }
     const nearestAngle = (target: number, from: number) => {
       let resolved = target
       while (resolved - from > 180) resolved -= 360
@@ -809,16 +842,9 @@ export function useStudioController() {
     }
 
     if (transitionSettings) {
-      if (motionLayerChanges) {
-        sequenceOffsetBridge.current = {
-          from: { ...lastRenderedOffset.current },
-          startedAt: -1,
-          durationMs: Math.max(transitionSettings.transitionMs, 1),
-        }
-      }
       stopTransition(true)
       stopColorTransitions()
-      const durationMs = transitionSettings.transitionMs
+      const durationMs = resolvedTransitionSettings.transitionMs
       const from = { ...current }
       const preserveAmbientMotion =
         from.bodyMotion === next.bodyMotion && from.eyeMotion === next.eyeMotion
@@ -832,7 +858,7 @@ export function useStudioController() {
       activeSequenceTransition.current = {
         target: next,
         index,
-        settings: transitionSettings,
+        settings: resolvedTransitionSettings,
         remainingMs: durationMs,
       }
       const tickSequenceTransition = (time: number) => {
@@ -840,11 +866,11 @@ export function useStudioController() {
         const elapsed = time - startedAt
         const progress = Math.min(elapsed / durationMs, 1)
         const eased =
-          transitionSettings.transition === 'linear'
+          resolvedTransitionSettings.transition === 'linear'
             ? progress
-            : transitionSettings.transition === 'smooth'
+            : resolvedTransitionSettings.transition === 'smooth'
               ? progress * progress * (3 - 2 * progress)
-              : transitionSettings.transition === 'snappy'
+              : resolvedTransitionSettings.transition === 'snappy'
                 ? 1 - (1 - progress) ** 3
                 : 1 - Math.exp(-6 * progress) * Math.cos(8 * progress)
         const animated = { ...from, eyeMotion: next.eyeMotion, bodyMotion: next.bodyMotion }
@@ -854,7 +880,7 @@ export function useStudioController() {
         activeSequenceTransition.current = {
           target: next,
           index,
-          settings: transitionSettings,
+          settings: resolvedTransitionSettings,
           remainingMs: Math.max(durationMs - elapsed, 0),
         }
         setDisplayColors({
@@ -1335,6 +1361,7 @@ export function useStudioController() {
   }
 
   const stopState = (persist = true) => {
+    startVisualHandoff(520)
     clearStateTimers()
     updateCursorFollowEnabled(false)
     playbackTimeline.current = stopPlaybackTimeline(playbackTimeline.current)
@@ -1343,18 +1370,17 @@ export function useStudioController() {
     stopTransition(true)
     blinkControls.current?.stop()
     blinkAnimating.current = false
-    blinkValue.jump(1)
+    blinkControls.current = animate(blinkValue, 1, {
+      duration: reduceMotion ? 0 : 0.22,
+      ease: 'easeOut',
+    })
     activeGazeProfileRef.current = null
     lastRenderedGaze.current = null
     gazeBlendFrom.current = null
     gazeBlendStartedAt.current = -1
-    gazeRelease.current = null
-    deferredFaceForward.current = null
     gazeStartedAt.current = -1
     lastGazeElapsed.current = 0
-    const avatar = avatarsRef.current.find(item => item.id === activeAvatarIdRef.current)
-    updateActiveFaceForward(manualGazeTargetRef.current ? false : Boolean(avatar?.faceForward))
-    paintPose(displayedPose.current, 1)
+    paintPose(displayedPose.current)
     setStatePlaying(false)
     setPlaybackStatus('stopped')
     setPlaybackVisual(current => ({ ...current, position: null }))
@@ -1428,12 +1454,12 @@ export function useStudioController() {
           }
           const expressionIndex = findExpressionIndex(expressionsRef.current, step.expressionId)
           const expression = expressionsRef.current[expressionIndex]
-          if (expression) transitionToExpression(expression, expressionIndex, step)
+          const transitionMs = reduceMotion ? 0 : Math.max(step.transitionMs, 180)
+          if (expression) {
+            transitionToExpression(expression, expressionIndex, { ...step, transitionMs })
+          }
           actionPosition += 1
-          autonomousActionStepTimer.current = setTimeout(
-            playActionStep,
-            step.transitionMs + step.holdMs
-          )
+          autonomousActionStepTimer.current = setTimeout(playActionStep, transitionMs + step.holdMs)
         }
         playActionStep()
       }, delay)
@@ -1464,8 +1490,8 @@ export function useStudioController() {
       avatarsRef.current.find(item => item.id === activeAvatarIdRef.current) ?? activeAvatar
     const previousSequence = activeSequenceRef.current
     const switchingSequence = !resume && previousSequence?.id !== sequence.id
-    const cursorWasActive = cursorFollowActiveRef.current
     const entryTransitionMs = Math.max(sequence.steps[0]?.transitionMs ?? 500, 680)
+    startVisualHandoff(entryTransitionMs)
     const previousGazeProfile = activeGazeProfileRef.current
     const requestedGazeProfile = resolveSequenceGazeProfile(sequence)
     // Authored actions opt out of live gaze so a second head rig cannot fight
@@ -1482,25 +1508,9 @@ export function useStudioController() {
     setThinking(false)
     if (playbackAvatar.logoMorph) setLogoFace(sequence.presentation !== 'logo')
     const nextFaceForward = resolveSequenceFaceForward(playbackAvatar.faceForward, sequence)
-    if (
-      cursorWasActive &&
-      sequence.presentation === 'logo' &&
-      playbackAvatar.logoMorph &&
-      faceReveal.get() > 0.001
-    ) {
-      // Keep the visible face attached to its current 3D pose while it fades out.
-      // Switching to the logo's locked-face mode before the fade begins produces
-      // a one-frame eye/head snap even when the gaze itself is interpolated.
-      deferredFaceForward.current = nextFaceForward
-    } else {
-      deferredFaceForward.current = null
-      updateActiveFaceForward(nextFaceForward)
-    }
+    updateActiveFaceForward(nextFaceForward)
     activeSequenceRef.current = sequence
-    updateCursorFollowEnabled(
-      Boolean(sequence.driver),
-      switchingSequence ? entryTransitionMs : undefined
-    )
+    updateCursorFollowEnabled(Boolean(sequence.driver))
     paintPose(displayedPose.current, undefined, performance.now())
     const id = sequence.id
     playbackTimeline.current = beginPlayback(playbackTimeline.current, resume)
@@ -1530,7 +1540,10 @@ export function useStudioController() {
             transitionMs: Math.max(step.transitionMs, 680),
             transition: 'smooth' as const,
           }
-        : step
+        : {
+            ...step,
+            transitionMs: reduceMotion ? 0 : Math.max(step.transitionMs, 180),
+          }
       enteringSequence = false
       const durationMs = (reduceMotion ? 0 : transitionSettings.transitionMs) + step.holdMs
       setPlaybackVisual(current => ({
@@ -1553,6 +1566,7 @@ export function useStudioController() {
         playbackTimeline.current = { ...playbackTimeline.current, blinkDueAt: null }
         const retainLiveGaze = sequence.group === 'Animations'
         if (!retainLiveGaze) {
+          startVisualHandoff(420)
           activeGazeProfileRef.current = null
           gazeStartedAt.current = -1
           lastGazeElapsed.current = 0
@@ -1591,7 +1605,15 @@ export function useStudioController() {
           ? findExpressionIndex(expressionsRef.current, firstStep.expressionId)
           : -1
         const preset = expressionsRef.current[expressionIndex]
-        if (preset && firstStep) transitionToExpression(preset, expressionIndex, firstStep)
+        if (preset && firstStep) {
+          transitionToExpression(preset, expressionIndex, {
+            ...firstStep,
+            transitionMs: switchingSequence
+              ? Math.max(firstStep.transitionMs, entryTransitionMs)
+              : firstStep.transitionMs,
+            transition: switchingSequence ? 'smooth' : firstStep.transition,
+          })
+        }
       } else {
         startAutonomousPlayback(sequence)
       }

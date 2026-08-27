@@ -79,9 +79,11 @@ describe('avatar export', () => {
     expect(source).toContain("addEventListener('pointermove', followPointer")
     expect(source).toContain("driver === 'autonomous'")
     expect(source).toContain('startAutonomous')
-    expect(source).toContain('gazeReleaseFrom = lastRenderedGaze')
+    expect(source).toContain('beginVisualHandoff')
+    expect(source).toContain('fromExpression')
     expect(source).toContain('blendCoordinatedGaze')
-    expect(source).toContain('preserveAttachedFace')
+    expect(source).toContain('fromFaceForwardAmount')
+    expect(source).toContain('faceForwardAmount')
   })
 
   it('generates a standalone JavaScript module without a Web Component', () => {

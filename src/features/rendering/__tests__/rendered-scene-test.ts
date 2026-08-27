@@ -89,6 +89,23 @@ describe('rendered avatar scene', () => {
     expect(spinning.rightPath).toBe(forward.rightPath)
   })
 
+  it('continuously blends the face between head-attached and viewer-locked rigs', () => {
+    const expression = { ...defaultExpression, headX: 42, headY: -68, headZ: 24 }
+    const pose = poseFromExpression(expression)
+    const attached = renderAvatar(pose, surfacePresets.cube, 1, { faceForwardAmount: 0 })
+    const halfway = renderAvatar(pose, surfacePresets.cube, 1, { faceForwardAmount: 0.5 })
+    const locked = renderAvatar(pose, surfacePresets.cube, 1, { faceForwardAmount: 1 })
+
+    expect(attached.leftPath).not.toBe(halfway.leftPath)
+    expect(halfway.leftPath).not.toBe(locked.leftPath)
+    expect(attached.rightPath).not.toBe(halfway.rightPath)
+    expect(halfway.rightPath).not.toBe(locked.rightPath)
+    expect(renderAvatar(pose, surfacePresets.cube, 1).leftPath).toBe(attached.leftPath)
+    expect(renderAvatar(pose, surfacePresets.cube, 1, { faceForward: true }).leftPath).toBe(
+      locked.leftPath
+    )
+  })
+
   it('keeps the Bible Strong face inside one continuous frame aperture', () => {
     const avatar = defaultStudioDocument.library.avatars.find(item => item.name === 'Bible Strong')!
     const forward = renderAvatar(
