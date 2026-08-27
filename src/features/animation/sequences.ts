@@ -10,7 +10,7 @@ import type { Expression } from '../avatar/geometry'
 import { gazeProfiles, type GazeProfile } from '../avatar/ambientMotion'
 
 export type SequencePlaybackMode = 'loop' | 'once' | 'pingPong'
-export type SequenceTransition = 'spring' | 'smooth' | 'snappy'
+export type SequenceTransition = 'spring' | 'smooth' | 'snappy' | 'linear'
 export type SequencePresentation = 'face' | 'logo'
 export type SequenceFaceMode = 'locked' | 'attached'
 export type SequenceEffect =
@@ -61,7 +61,7 @@ export type SequenceCursor = {
 }
 
 const playbackModes: SequencePlaybackMode[] = ['loop', 'once', 'pingPong']
-const transitions: SequenceTransition[] = ['spring', 'smooth', 'snappy']
+const transitions: SequenceTransition[] = ['spring', 'smooth', 'snappy', 'linear']
 const presentations: SequencePresentation[] = ['face', 'logo']
 const faceModes: SequenceFaceMode[] = ['locked', 'attached']
 const effects: SequenceEffect[] = [
@@ -140,7 +140,7 @@ const parseStep = (value: unknown, fallback: SequenceStep): SequenceStep => {
       typeof candidate?.expressionId === 'string' && candidate.expressionId
         ? candidate.expressionId
         : fallback.expressionId,
-    holdMs: finite(candidate?.holdMs, fallback.holdMs, 100, 60000),
+    holdMs: finite(candidate?.holdMs, fallback.holdMs, 0, 60000),
     transitionMs: finite(candidate?.transitionMs, fallback.transitionMs, 0, 5000),
     transition: transitions.includes(candidate?.transition as SequenceTransition)
       ? (candidate?.transition as SequenceTransition)
@@ -370,7 +370,14 @@ export const getSequenceSpring = (
   baseSpeed: number
 ) => {
   const durationFactor = Math.min(Math.max(500 / Math.max(durationMs, 100), 0.35), 3)
-  const styleFactor = transition === 'smooth' ? 0.72 : transition === 'snappy' ? 1.45 : 1
+  const styleFactor =
+    transition === 'smooth'
+      ? 0.72
+      : transition === 'snappy'
+        ? 1.45
+        : transition === 'linear'
+          ? 1
+          : 1
   const speed = Math.max(baseSpeed * durationFactor * styleFactor, 0.5)
   return {
     stiffness: 70 + speed * 24,

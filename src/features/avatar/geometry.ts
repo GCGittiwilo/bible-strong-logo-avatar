@@ -15,7 +15,7 @@ const normalizePoint3 = ([x, y, z]: Point3): Point3 => {
   return [x / length, y / length, z / length]
 }
 export type EyeMotion = 'none' | 'microSaccades' | 'shake'
-export type BodyMotion = 'none' | 'slowDrift' | 'shake'
+export type BodyMotion = 'none' | 'slowDrift' | 'shake' | 'bounce' | 'laugh' | 'sob'
 
 export type Expression = {
   id: string

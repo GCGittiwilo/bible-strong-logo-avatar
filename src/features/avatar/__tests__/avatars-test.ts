@@ -176,15 +176,15 @@ describe('avatar behavior revisions', () => {
     expect(result.avatars[0].mouthRevision).toBe(1)
   })
 
-  it('adds connected head animations plus logo loading', () => {
+  it('adds connected head and character animations plus continuous logo loading', () => {
     const behavior = resolveAvatarBehavior(
       { ...createAvatar('Bible Strong Spins'), spinAnimations: true, faceForward: true },
       base
     )
 
-    expect(behavior.expressions).toHaveLength(base.expressions.length + 18)
-    expect(behavior.sequences).toHaveLength(base.sequences.length + 6)
-    expect(behavior.sequences.filter(sequence => sequence.group === 'Animations')).toHaveLength(5)
+    expect(behavior.expressions).toHaveLength(base.expressions.length + 36)
+    expect(behavior.sequences).toHaveLength(base.sequences.length + 12)
+    expect(behavior.sequences.filter(sequence => sequence.group === 'Animations')).toHaveLength(11)
     expect(
       behavior.sequences
         .filter(sequence => sequence.group === 'Animations')
@@ -193,14 +193,22 @@ describe('avatar behavior revisions', () => {
     expect(
       behavior.sequences
         .filter(sequence => sequence.group === 'Animations')
-        .every(sequence => sequence.gazeProfile === 'animation' && sequence.playbackMode === 'once')
+        .every(sequence => sequence.gazeProfile && sequence.playbackMode === 'once')
     ).toBe(true)
+    expect(
+      behavior.sequences
+        .filter(sequence => sequence.id.startsWith('character-'))
+        .map(sequence => sequence.name)
+    ).toEqual(['Laughing', 'Crying', 'Jumping', 'Excited Bounce', 'Surprised Jolt', 'Shy Sway'])
     expect(behavior.sequences.at(-1)).toMatchObject({
       id: 'loading',
       group: 'Loading',
       presentation: 'logo',
       faceMode: 'locked',
     })
+    expect(behavior.sequences.at(-1)?.steps).toHaveLength(8)
+    expect(behavior.sequences.at(-1)?.steps.every(step => step.transition === 'linear')).toBe(true)
+    expect(behavior.sequences.at(-1)?.steps.every(step => step.holdMs === 0)).toBe(true)
   })
 
   it('centers saved logo eyes when the bundled eye layout is upgraded', () => {

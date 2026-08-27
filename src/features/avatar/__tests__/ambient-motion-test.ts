@@ -110,6 +110,19 @@ describe('perpetual expression motion', () => {
     expect(ambientBodyOffset(expression, 1500)).not.toEqual({ x: 0, y: 0 })
   })
 
+  it('gives character actions distinct full-body motion profiles', () => {
+    const bounce = { ...defaultExpression, bodyMotion: 'bounce' as const }
+    const laugh = { ...defaultExpression, bodyMotion: 'laugh' as const }
+    const sob = { ...defaultExpression, bodyMotion: 'sob' as const }
+
+    expect(ambientBodyOffset(bounce, 460).y).toBeLessThan(-20)
+    expect(ambientBodyOffset(laugh, 180).y).toBeLessThan(0)
+    expect(ambientBodyOffset(sob, 180).y).toBeGreaterThan(0)
+    expect(applyAmbientBodyMotion(bounce, 230).headX).not.toBe(defaultExpression.headX)
+    expect(applyAmbientBodyMotion(laugh, 180).headZ).not.toBe(defaultExpression.headZ)
+    expect(applyAmbientBodyMotion(sob, 180).headX).toBeLessThan(defaultExpression.headX)
+  })
+
   it('keeps small glances eye-only and lets the head follow larger gaze targets', () => {
     const smallGlance = coordinatedGazeAt('calm', 2700)
     const largeGlance = coordinatedGazeAt('scanning', 1700)

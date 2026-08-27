@@ -701,11 +701,13 @@ export function useStudioController() {
         const elapsed = time - startedAt
         const progress = Math.min(elapsed / durationMs, 1)
         const eased =
-          transitionSettings.transition === 'smooth'
-            ? progress * progress * (3 - 2 * progress)
-            : transitionSettings.transition === 'snappy'
-              ? 1 - (1 - progress) ** 3
-              : 1 - Math.exp(-6 * progress) * Math.cos(8 * progress)
+          transitionSettings.transition === 'linear'
+            ? progress
+            : transitionSettings.transition === 'smooth'
+              ? progress * progress * (3 - 2 * progress)
+              : transitionSettings.transition === 'snappy'
+                ? 1 - (1 - progress) ** 3
+                : 1 - Math.exp(-6 * progress) * Math.cos(8 * progress)
         const animated = { ...from, eyeMotion: next.eyeMotion, bodyMotion: next.bodyMotion }
         expressionFields.forEach(field => {
           animated[field] = from[field] + (resolvedTarget[field] - from[field]) * eased

@@ -180,7 +180,7 @@ describe('Studio document', () => {
     )
 
     expect(imported.sequences[0].playbackMode).toBe('loop')
-    expect(imported.sequences[0].steps[0].holdMs).toBeGreaterThanOrEqual(100)
+    expect(imported.sequences[0].steps[0].holdMs).toBeGreaterThanOrEqual(0)
     expect(Number.isFinite(imported.sequences[0].steps[0].transitionMs)).toBe(true)
   })
 })

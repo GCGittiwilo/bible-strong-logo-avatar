@@ -1,7 +1,7 @@
 import type { BodyMotion, Expression, EyeMotion } from './geometry'
 
 export const eyeMotionModes = ['none', 'microSaccades', 'shake'] as const
-export const bodyMotionModes = ['none', 'slowDrift', 'shake'] as const
+export const bodyMotionModes = ['none', 'slowDrift', 'shake', 'bounce', 'laugh', 'sob'] as const
 export const gazeProfiles = [
   'calm',
   'attentive',
@@ -397,6 +397,28 @@ export const ambientBodyOffset = (expression: Expression, elapsedMs: number, str
       y: (Math.sin(time * 37) + Math.sin(time * 61) * 0.4) * 1.1 * strength,
     }
   }
+  if (expression.bodyMotion === 'bounce') {
+    const phase = (Math.max(0, elapsedMs) % 920) / 920
+    const lift = Math.sin(phase * Math.PI)
+    return {
+      x: Math.sin(phase * Math.PI * 2) * 1.8 * strength,
+      y: -(Math.max(0, lift) ** 1.45) * 27 * strength,
+    }
+  }
+  if (expression.bodyMotion === 'laugh') {
+    const time = elapsedMs / 1000
+    return {
+      x: Math.sin(time * 12.5) * 1.8 * strength,
+      y: -Math.abs(Math.sin(time * 12.5)) * 4.8 * strength,
+    }
+  }
+  if (expression.bodyMotion === 'sob') {
+    const time = elapsedMs / 1000
+    return {
+      x: Math.sin(time * 4.8) * 0.7 * strength,
+      y: Math.abs(Math.sin(time * 9.6)) * 2.8 * strength,
+    }
+  }
   return { x: 0, y: 0 }
 }
 
@@ -434,6 +456,18 @@ export const applyAmbientBodyMotion = (
     next.headX += (Math.sin(time * 31) + Math.sin(time * 53) * 0.45) * 1.15 * strength
     next.headY += (Math.sin(time * 37) + Math.sin(time * 61) * 0.4) * 1.35 * strength
     next.headZ += Math.sin(time * 43) * 0.7 * strength
+  } else if (expression.bodyMotion === 'bounce') {
+    const phase = (Math.max(0, elapsedMs) % 920) / 920
+    next.headX += Math.sin(phase * Math.PI * 2) * 5 * strength
+    next.headZ += Math.sin(phase * Math.PI * 2) * 2.4 * strength
+  } else if (expression.bodyMotion === 'laugh') {
+    const time = elapsedMs / 1000
+    next.headX += Math.sin(time * 12.5) * 4.8 * strength
+    next.headZ += Math.sin(time * 6.25) * 5.5 * strength
+  } else if (expression.bodyMotion === 'sob') {
+    const time = elapsedMs / 1000
+    next.headX -= (2.4 + Math.abs(Math.sin(time * 9.6)) * 5.2) * strength
+    next.headZ += Math.sin(time * 4.8) * 1.8 * strength
   }
 
   return next

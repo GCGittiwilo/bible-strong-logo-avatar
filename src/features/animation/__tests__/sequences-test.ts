@@ -75,7 +75,7 @@ describe('editable avatar sequences', () => {
     ])
 
     expect(sequence.playbackMode).toBe('loop')
-    expect(sequence.steps[0].holdMs).toBe(100)
+    expect(sequence.steps[0].holdMs).toBe(0)
     expect(sequence.steps[0].transitionMs).toBe(5000)
     expect(sequence.blink.maxIntervalMs).toBe(sequence.blink.minIntervalMs)
     expect(sequence.blink.durationMs).toBe(40)

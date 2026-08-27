@@ -199,6 +199,7 @@ const spinExpressions = [
     spinExpression(`logo-spin-y-${angle}`, 0, angle, 0),
     spinExpression(`logo-spin-z-${angle}`, 0, 0, angle),
   ]),
+  ...[45, 135, 225, 315].map(angle => spinExpression(`logo-spin-y-${angle}`, 0, angle, 0)),
   spinExpression('logo-spin-diagonal-1', 48, 52, 20),
   spinExpression('logo-spin-diagonal-2', -52, 128, 62),
   spinExpression('logo-spin-diagonal-3', 44, 214, 138),
@@ -207,6 +208,164 @@ const spinExpressions = [
   spinExpression('logo-spin-gyro-2', -48, 112, 78),
   spinExpression('logo-spin-gyro-3', 62, 202, 158),
   spinExpression('logo-spin-gyro-4', -42, 292, 262),
+]
+
+const characterExpression = (id: string, values: Partial<Expression>): Expression => ({
+  ...defaultExpression,
+  id,
+  eyeMotion: 'none',
+  bodyMotion: 'none',
+  ...values,
+})
+
+const characterExpressions = [
+  characterExpression('character-rest', {}),
+  characterExpression('character-laugh-small', {
+    widthLeft: 42,
+    widthRight: 42,
+    heightLeft: 13,
+    heightRight: 13,
+    spacing: 54,
+    leftAngle: -11,
+    rightAngle: 11,
+    bodyMotion: 'laugh',
+  }),
+  characterExpression('character-laugh-big', {
+    headX: 8,
+    widthLeft: 50,
+    widthRight: 50,
+    heightLeft: 10,
+    heightRight: 10,
+    spacing: 58,
+    leftAngle: -17,
+    rightAngle: 17,
+    bodyMotion: 'laugh',
+  }),
+  characterExpression('character-cry-soft', {
+    headX: -9,
+    widthLeft: 39,
+    widthRight: 39,
+    heightLeft: 17,
+    heightRight: 17,
+    spacing: 52,
+    positionYLeft: 5,
+    positionYRight: 5,
+    leftAngle: 17,
+    rightAngle: -17,
+    eyeMotion: 'shake',
+    bodyMotion: 'sob',
+  }),
+  characterExpression('character-cry-deep', {
+    headX: -18,
+    widthLeft: 43,
+    widthRight: 43,
+    heightLeft: 11,
+    heightRight: 11,
+    spacing: 54,
+    positionYLeft: 10,
+    positionYRight: 10,
+    leftAngle: 23,
+    rightAngle: -23,
+    eyeMotion: 'shake',
+    bodyMotion: 'sob',
+  }),
+  characterExpression('character-jump-crouch', {
+    headX: -13,
+    widthLeft: 33,
+    widthRight: 33,
+    heightLeft: 35,
+    heightRight: 35,
+    spacing: 48,
+    positionYLeft: 5,
+    positionYRight: 5,
+    bodyMotion: 'bounce',
+  }),
+  characterExpression('character-jump-air', {
+    headX: 10,
+    widthLeft: 43,
+    widthRight: 43,
+    heightLeft: 58,
+    heightRight: 58,
+    spacing: 57,
+    positionYLeft: -8,
+    positionYRight: -8,
+    bodyMotion: 'bounce',
+  }),
+  characterExpression('character-jump-land', {
+    headX: -8,
+    widthLeft: 38,
+    widthRight: 38,
+    heightLeft: 20,
+    heightRight: 20,
+    spacing: 52,
+    positionYLeft: 4,
+    positionYRight: 4,
+    bodyMotion: 'bounce',
+  }),
+  characterExpression('character-excited-left', {
+    headX: 7,
+    headZ: -10,
+    widthLeft: 47,
+    widthRight: 47,
+    heightLeft: 61,
+    heightRight: 61,
+    spacing: 60,
+    bodyMotion: 'bounce',
+  }),
+  characterExpression('character-excited-right', {
+    headX: 7,
+    headZ: 10,
+    widthLeft: 47,
+    widthRight: 47,
+    heightLeft: 61,
+    heightRight: 61,
+    spacing: 60,
+    bodyMotion: 'bounce',
+  }),
+  characterExpression('character-surprised', {
+    headX: 8,
+    widthLeft: 48,
+    widthRight: 48,
+    heightLeft: 76,
+    heightRight: 76,
+    spacing: 62,
+    bodyMotion: 'shake',
+  }),
+  characterExpression('character-recoil', {
+    headX: -14,
+    widthLeft: 35,
+    widthRight: 35,
+    heightLeft: 35,
+    heightRight: 35,
+    spacing: 53,
+    bodyMotion: 'shake',
+  }),
+  characterExpression('character-shy-left', {
+    headX: -8,
+    headY: -18,
+    headZ: -8,
+    widthLeft: 36,
+    widthRight: 36,
+    heightLeft: 25,
+    heightRight: 25,
+    spacing: 49,
+    positionYLeft: 7,
+    positionYRight: 7,
+    bodyMotion: 'slowDrift',
+  }),
+  characterExpression('character-shy-right', {
+    headX: -8,
+    headY: 18,
+    headZ: 8,
+    widthLeft: 36,
+    widthRight: 36,
+    heightLeft: 25,
+    heightRight: 25,
+    spacing: 49,
+    positionYLeft: 7,
+    positionYRight: 7,
+    bodyMotion: 'slowDrift',
+  }),
 ]
 
 const spinBlink = {
@@ -227,6 +386,7 @@ const spinSequence = (
     presentation?: AvatarSequence['presentation']
     transitionMs?: number
     transition?: AvatarSequence['steps'][number]['transition']
+    holdMs?: number
   } = {}
 ): AvatarSequence => ({
   id,
@@ -244,7 +404,7 @@ const spinSequence = (
   steps: expressionIds.map((expressionId, index) => ({
     id: `${id}-step-${index}`,
     expressionId,
-    holdMs: options.transition === 'snappy' ? 140 : 90,
+    holdMs: options.holdMs ?? (options.transition === 'snappy' ? 140 : 90),
     transitionMs: options.transitionMs ?? 420,
     transition: options.transition ?? 'smooth',
   })),
@@ -271,6 +431,123 @@ const gyroscopeSequence = [
   'logo-spin-gyro-3',
   'logo-spin-gyro-4',
   'logo-spin-rest',
+]
+
+const characterSequence = (
+  id: string,
+  name: string,
+  description: string,
+  expressionIds: string[],
+  gazeProfile: AvatarSequence['gazeProfile'],
+  transitionMs = 230
+): AvatarSequence => ({
+  id,
+  name,
+  group: 'Animations',
+  description,
+  builtIn: true,
+  presentation: 'face',
+  faceMode: 'attached',
+  gazeProfile,
+  playbackMode: 'once',
+  steps: expressionIds.map((expressionId, index) => ({
+    id: `${id}-step-${index}`,
+    expressionId,
+    holdMs: index === expressionIds.length - 1 ? 80 : 170,
+    transitionMs,
+    transition: index === 1 ? 'snappy' : 'smooth',
+  })),
+  blink: { ...spinBlink, initialDelayMs: 900 },
+})
+
+const characterSequences = [
+  characterSequence(
+    'character-laughing',
+    'Laughing',
+    'Happy crescent eyes, rhythmic shoulder movement, and a lively head laugh.',
+    [
+      'character-rest',
+      'character-laugh-small',
+      'character-laugh-big',
+      'character-laugh-small',
+      'character-laugh-big',
+      'character-rest',
+    ],
+    'celebratory',
+    190
+  ),
+  characterSequence(
+    'character-crying',
+    'Crying',
+    'Sad tilted eyes and a soft repeated sob that travels through the whole mascot.',
+    [
+      'character-rest',
+      'character-cry-soft',
+      'character-cry-deep',
+      'character-cry-soft',
+      'character-cry-deep',
+      'character-rest',
+    ],
+    'reflective',
+    250
+  ),
+  characterSequence(
+    'character-jumping',
+    'Jumping',
+    'The mascot crouches, springs upward, lands, and settles cleanly.',
+    [
+      'character-rest',
+      'character-jump-crouch',
+      'character-jump-air',
+      'character-jump-land',
+      'character-rest',
+    ],
+    'celebratory',
+    175
+  ),
+  characterSequence(
+    'character-excited-bounce',
+    'Excited Bounce',
+    'Wide eyes and alternating tilts create an energetic happy bounce.',
+    [
+      'character-rest',
+      'character-excited-left',
+      'character-excited-right',
+      'character-excited-left',
+      'character-excited-right',
+      'character-rest',
+    ],
+    'celebratory',
+    180
+  ),
+  characterSequence(
+    'character-surprised-jolt',
+    'Surprised Jolt',
+    'The eyes pop open as the mascot recoils, then regains its composure.',
+    [
+      'character-rest',
+      'character-surprised',
+      'character-recoil',
+      'character-surprised',
+      'character-rest',
+    ],
+    'alert',
+    165
+  ),
+  characterSequence(
+    'character-shy-sway',
+    'Shy Sway',
+    'A gentle downward glance with a reserved side-to-side sway.',
+    [
+      'character-rest',
+      'character-shy-left',
+      'character-shy-right',
+      'character-shy-left',
+      'character-rest',
+    ],
+    'reflective',
+    360
+  ),
 ]
 
 const spinFamily = () => [
@@ -306,11 +583,19 @@ const spinFamily = () => [
   }),
 ]
 
+const loadingSpinSequence = [
+  'logo-spin-rest',
+  ...[45, 90, 135, 180, 225, 270, 315].map(angle => `logo-spin-y-${angle}`),
+]
+
 const spinSequences = [
   ...spinFamily(),
-  spinSequence('loading', 'loading', axisSequence('y'), 'Loading', 'locked', {
+  ...characterSequences,
+  spinSequence('loading', 'Loading', loadingSpinSequence, 'Loading', 'locked', {
     presentation: 'logo',
-    transitionMs: 360,
+    transitionMs: 190,
+    transition: 'linear',
+    holdMs: 0,
   }),
 ]
 
@@ -320,7 +605,8 @@ export const resolveAvatarBehavior = (
 ): AvatarBehaviorLibrary => {
   const source = avatar.behavior ?? base
   if (!avatar.spinAnimations) return source
-  const spinExpressionIds = new Set(spinExpressions.map(expression => expression.id))
+  const builtInAnimationExpressions = [...spinExpressions, ...characterExpressions]
+  const spinExpressionIds = new Set(builtInAnimationExpressions.map(expression => expression.id))
   const legacySpinSequenceIds = new Set(
     ['face-locked', 'face-attached'].flatMap(prefix =>
       ['horizontal-360', 'vertical-360', 'roll-360', 'diagonal-orbit', 'gyroscope'].map(
@@ -335,7 +621,7 @@ export const resolveAvatarBehavior = (
   return {
     expressions: [
       ...source.expressions.filter(expression => !spinExpressionIds.has(expression.id)),
-      ...cloneExpressions(spinExpressions),
+      ...cloneExpressions(builtInAnimationExpressions),
     ],
     sequences: [
       ...source.sequences.filter(sequence => !spinSequenceIds.has(sequence.id)),
