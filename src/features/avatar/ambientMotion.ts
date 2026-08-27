@@ -281,7 +281,9 @@ export const solveGazeRig = (
           : (eyePitch / gazeRigLimits.eye.down) * 34,
     },
     headOffset: {
-      x: visibleHeadPitch,
+      // Screen Y grows downward, while positive model-space X rotation visually
+      // pitches the face upward. Convert the semantic gaze pitch at this boundary.
+      x: -visibleHeadPitch,
       y: visibleHeadYaw,
       z: roll,
     },

@@ -129,7 +129,7 @@ describe('perpetual expression motion', () => {
     expect(eyeOnly.headOffset.y).toBeCloseTo(0)
     expect(animated.headY).not.toBeCloseTo(defaultExpression.headY)
     expect(Math.sign(animated.headY)).toBe(Math.sign(eyeAndHead.eyeSocket.yaw))
-    expect(Math.sign(animated.headX)).toBe(Math.sign(eyeAndHead.eyeSocket.pitch))
+    expect(Math.sign(animated.headX)).toBe(-Math.sign(eyeAndHead.eyeSocket.pitch))
   })
 
   it('resolves large looks through socket, neck, and forward-facing body limits', () => {
@@ -172,6 +172,20 @@ describe('perpetual expression motion', () => {
     expect(side.neckOffset.yaw).toBeCloseTo(gazeRigLimits.neck.yaw)
     expect(Math.abs(side.headOffset.y)).toBeGreaterThan(64)
     expect(Math.abs(side.headOffset.y)).toBeLessThanOrEqual(72)
+  })
+
+  it('converts vertical gaze into the renderer pitch direction without reversing the look', () => {
+    const up = solveGazeRig({ x: 0, y: -1 })
+    const down = solveGazeRig({ x: 0, y: 1 })
+    const renderedUp = applyCoordinatedGaze(defaultExpression, up)
+    const renderedDown = applyCoordinatedGaze(defaultExpression, down)
+
+    expect(up.eyeOffset.y).toBeLessThan(0)
+    expect(up.eyeSocket.pitch).toBeLessThan(0)
+    expect(renderedUp.headX).toBeGreaterThan(0)
+    expect(down.eyeOffset.y).toBeGreaterThan(0)
+    expect(down.eyeSocket.pitch).toBeGreaterThan(0)
+    expect(renderedDown.headX).toBeLessThan(0)
   })
 
   it('keeps every automated head direction linked to its current eye direction', () => {
