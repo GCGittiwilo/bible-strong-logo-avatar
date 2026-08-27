@@ -90,8 +90,11 @@ export const paintRenderedOffset = (scene: RenderedScene, offset: { x: number; y
   scene.offsetY.set(offset.y)
 }
 
-export const paintRenderedScene = (scene: RenderedScene, geometry: AvatarGeometry) => {
-  const anchor = statusAnchor(geometry)
+export const paintRenderedScene = (
+  scene: RenderedScene,
+  geometry: AvatarGeometry,
+  updateStatusAnchor = true
+) => {
   scene.headPath.set(geometry.headPath)
   scene.faceClipPath.set(geometry.faceClipPath)
   scene.backNodeIds.current = geometry.backNodeIds
@@ -105,8 +108,11 @@ export const paintRenderedScene = (scene: RenderedScene, geometry: AvatarGeometr
   scene.mouthPath.set(geometry.mouthPath)
   scene.tonguePath.set(geometry.tonguePath)
   scene.mouthOpacity.set(geometry.mouthVisible ? 1 : 0)
-  scene.statusAnchorX.set(anchor.x)
-  scene.statusAnchorY.set(anchor.y)
+  if (updateStatusAnchor) {
+    const anchor = statusAnchor(geometry)
+    scene.statusAnchorX.set(anchor.x)
+    scene.statusAnchorY.set(anchor.y)
+  }
   scene.wirePaths.forEach((path, index) => path.set(geometry.wirePaths[index] ?? ''))
 }
 

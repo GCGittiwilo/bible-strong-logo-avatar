@@ -359,7 +359,9 @@ const spinSequence = (
   steps: expressionIds.map((expressionId, index) => ({
     id: `${id}-step-${index}`,
     expressionId,
-    holdMs: options.holdMs ?? (options.transition === 'snappy' ? 140 : 90),
+    // A pause between every pose reads as dropped frames. The transition easing
+    // already supplies the intended settle at each key pose.
+    holdMs: options.holdMs ?? 0,
     transitionMs: options.transitionMs ?? 420,
     transition: options.transition ?? 'smooth',
   })),
@@ -407,7 +409,7 @@ const characterSequence = (
   steps: expressionIds.map((expressionId, index) => ({
     id: `${id}-step-${index}`,
     expressionId,
-    holdMs: index === expressionIds.length - 1 ? 80 : 120,
+    holdMs: 0,
     transitionMs,
     transition: 'smooth',
   })),

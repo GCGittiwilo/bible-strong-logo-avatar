@@ -204,7 +204,9 @@ describe('avatar behavior revisions', () => {
       behavior.sequences
         .filter(sequence => sequence.id.startsWith('character-'))
         .every(sequence =>
-          sequence.steps.every(step => step.transition === 'smooth' && step.transitionMs >= 300)
+          sequence.steps.every(
+            step => step.transition === 'smooth' && step.transitionMs >= 300 && step.holdMs === 0
+          )
         )
     ).toBe(true)
     const animationExpressions = behavior.expressions.filter(expression =>

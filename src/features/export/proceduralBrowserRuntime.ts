@@ -145,7 +145,6 @@ function mountAvatar(target, options = {}) {
   let eyeAmbientSignature = initialExpression.eyeMotion;
   let bodyAmbientSignature = initialExpression.bodyMotion;
   let ambientStrength = 1;
-  let lastAmbientFrame = 0;
   const reducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
   let talking = Boolean(options.talking && DATA.avatar.mouth);
   let talkingStartedAt = performance.now();
@@ -337,10 +336,9 @@ function mountAvatar(target, options = {}) {
     }
     const ambientActive = AvatarProceduralEngine.hasAmbientMotion(currentPose.expression);
     const gazeActive = Boolean(activeGazeProfile) && !reducedMotion && (playing || liveGaze);
-    if (faceTransition || transitionState || blinkState || (!ambientActive && !gazeActive && !talking && !thinking) || time - lastAmbientFrame >= 1000 / 30) {
-      render(time);
-      if (ambientActive || gazeActive || talking || thinking) lastAmbientFrame = time;
-    }
+    // requestAnimationFrame already synchronizes this loop to the display. Do
+    // not halve a 60 Hz display to 30 FPS by throttling continuous motion here.
+    render(time);
     if (faceTransition || transitionState || blinkState || ambientActive || gazeActive || talking || thinking) frameRequest = requestAnimationFrame(tick);
   };
   const requestTick = () => {

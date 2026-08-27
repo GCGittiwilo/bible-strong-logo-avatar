@@ -501,7 +501,9 @@ export function useStudioController() {
             )
           : undefined,
     })
-    paintRenderedScene(renderedScene, geometry)
+    // Parsing every SVG path for the thought-bubble anchor is expensive and is
+    // only needed while that effect is actually visible.
+    paintRenderedScene(renderedScene, geometry, thinking)
     paintRenderedLogoMorph(renderedScene, avatar?.logoMorph, faceReveal.get())
     const proceduralOffset = bodyAmbientEnabled
       ? ambientBodyOffset(pose.expression, lastBodyAmbientElapsed.current, resolvedAmbientStrength)
@@ -560,6 +562,8 @@ export function useStudioController() {
 
   const ambientLoopActive =
     !reduceMotion &&
+    !talking &&
+    !thinking &&
     (hasAmbientMotion(editing?.draft ?? expression) || activeGazeProfileRef.current !== null)
   useEffect(() => {
     if (!ambientLoopActive) return
@@ -1256,10 +1260,9 @@ export function useStudioController() {
     const switchingSequence = !resume && previousSequence?.id !== sequence.id
     const previousGazeProfile = activeGazeProfileRef.current
     const requestedGazeProfile = resolveSequenceGazeProfile(sequence)
-    const nextGazeProfile =
-      sequence.group === 'Animations' && previousGazeProfile
-        ? previousGazeProfile
-        : requestedGazeProfile
+    // Authored actions opt out of live gaze so a second head rig cannot fight
+    // their keyframes and create apparent jitter.
+    const nextGazeProfile = requestedGazeProfile
     if (!resume && previousGazeProfile !== nextGazeProfile) {
       gazeBlendFrom.current = lastRenderedGaze.current
       gazeBlendStartedAt.current = -1

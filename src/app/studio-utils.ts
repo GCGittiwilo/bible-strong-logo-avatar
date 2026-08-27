@@ -43,7 +43,9 @@ export type Highlight = 'head' | 'left' | 'right' | 'both' | null
 
 export const RETARGET_BLEND_MS = 120
 export const INSPECTOR_FRAME_MS = 1000 / 24
-export const AMBIENT_FRAME_MS = 1000 / 30
+// Continuous mascot motion follows requestAnimationFrame at the display's native
+// refresh rate (normally 60 Hz, and 120 Hz on high-refresh displays).
+export const AMBIENT_FRAME_MS = 0
 export const createExpressionId = () => `expression-${crypto.randomUUID()}`
 export const emptyBodyNodes: BodyNode[] = []
 const previewGeometryCache = new WeakMap<

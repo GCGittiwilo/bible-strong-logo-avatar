@@ -142,4 +142,17 @@ describe('editable avatar sequences', () => {
     expect(sequence.faceMode).toBe('attached')
     expect(sequence.gazeProfile).toBe('orbit')
   })
+
+  it('lets authored actions disable the procedural gaze rig', () => {
+    const [sequence] = parseSequences([
+      {
+        ...createInitialSequences()[0],
+        id: 'authored-action',
+        gazeProfile: 'none',
+      },
+    ])
+
+    expect(sequence.gazeProfile).toBe('none')
+    expect(resolveSequenceGazeProfile(sequence)).toBeNull()
+  })
 })
