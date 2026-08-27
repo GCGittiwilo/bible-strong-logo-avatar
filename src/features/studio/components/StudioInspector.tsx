@@ -53,6 +53,7 @@ import {
   findExpressionIndex,
   groupSequences,
   resolveSequenceFaceForward,
+  resolveSequenceGazeProfile,
 } from '@/features/animation/sequences'
 import { defaultAvatarEyes } from '@/features/avatar/avatars'
 import { bodyPrimitiveTypes, MAX_BODY_NODES } from '@/features/avatar/body'
@@ -1510,6 +1511,7 @@ export function StudioInspector({ controller }: { controller: StudioController }
                                     activeAvatar.faceForward,
                                     sequence
                                   )}
+                                  gazeProfile={resolveSequenceGazeProfile(sequence)}
                                   showLogo={sequence.presentation === 'logo'}
                                   effect={sequence.effect}
                                   id={`state-card-${sequence.id}`}

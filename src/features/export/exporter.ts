@@ -2,13 +2,20 @@ import { applyAvatarEyeDefaults, type StudioAvatar } from '../avatar/avatars'
 import type { Expression } from '../avatar/geometry'
 import { translateStudioText, type StudioLanguage } from '../../i18n'
 import { proceduralBrowserRuntime } from './proceduralBrowserRuntime'
-import type { AvatarSequence } from '../animation/sequences'
+import { resolveSequenceGazeProfile, type AvatarSequence } from '../animation/sequences'
 import { standaloneEngineSource } from './standaloneEngine.generated'
 import { createStoredZip } from './storedZip'
 
 export type AvatarExportAnimation = Pick<
   AvatarSequence,
-  'name' | 'description' | 'playbackMode' | 'blink' | 'presentation' | 'effect' | 'faceMode'
+  | 'name'
+  | 'description'
+  | 'playbackMode'
+  | 'blink'
+  | 'presentation'
+  | 'effect'
+  | 'faceMode'
+  | 'gazeProfile'
 > & {
   steps: Pick<
     AvatarSequence['steps'][number],
@@ -69,6 +76,7 @@ export const createAvatarExportPayload = (
   const animations = Object.fromEntries(
     selectedAnimations.map(animation => {
       const key = animationKey(animation, usedKeys)
+      const gazeProfile = resolveSequenceGazeProfile(animation)
       return [
         key,
         {
@@ -76,6 +84,7 @@ export const createAvatarExportPayload = (
           description: animation.description,
           ...(animation.presentation ? { presentation: animation.presentation } : {}),
           ...(animation.faceMode ? { faceMode: animation.faceMode } : {}),
+          ...(gazeProfile ? { gazeProfile } : {}),
           ...(animation.effect ? { effect: animation.effect } : {}),
           playbackMode: animation.playbackMode,
           blink: { ...animation.blink },

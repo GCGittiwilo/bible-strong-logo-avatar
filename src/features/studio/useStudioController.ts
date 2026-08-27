@@ -37,14 +37,18 @@ import {
   readSequenceClock,
   remapSequencesAfterExpressionDelete,
   resolveSequenceFaceForward,
+  resolveSequenceGazeProfile,
   type AvatarSequence,
   type SequenceStep,
 } from '@/features/animation/sequences'
 import {
   ambientBodyOffset,
   ambientEyeOffset,
+  applyCoordinatedGaze,
   applyAmbientBodyMotion,
+  coordinatedGazeAt,
   hasAmbientMotion,
+  type GazeProfile,
 } from '@/features/avatar/ambientMotion'
 import {
   cloneAvatarBehavior,
@@ -238,6 +242,7 @@ export function useStudioController() {
   const [selectedSequenceStepId, setSelectedSequenceStepId] = useState<string | null>(null)
   const stateTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const activeSequenceRef = useRef<AvatarSequence | null>(null)
+  const activeGazeProfileRef = useRef<GazeProfile | null>(null)
   const editorStateSnapshot = useRef<{
     stateId: string
     playing: boolean
@@ -325,6 +330,8 @@ export function useStudioController() {
   const eyeAmbientSignature = useRef('none')
   const bodyAmbientSignature = useRef('none')
   const lastAmbientStrength = useRef(1)
+  const gazeStartedAt = useRef(-1)
+  const lastGazeElapsed = useRef(0)
   const transitionTarget = useRef<Expression>({ ...initialExpression })
   const canonicalTarget = useRef<Expression>({ ...initialExpression })
   const retargetFrom = useRef<Expression | null>(null)
@@ -378,7 +385,6 @@ export function useStudioController() {
     const resolvedAmbientStrength =
       ambientStrength ?? (transitionFrame.current === null ? 1 : lastAmbientStrength.current)
     lastAmbientStrength.current = resolvedAmbientStrength
-    paintRenderedRotationGizmo(renderedRotationGizmo, pose.expression)
     const avatar = avatarsRef.current.find(item => item.id === activeAvatarIdRef.current)
     const faceForward = activeFaceForwardRef.current
     const eyeExpression = faceForward
@@ -408,20 +414,36 @@ export function useStudioController() {
       if (bodyAmbientStartedAt.current < 0) bodyAmbientStartedAt.current = frameTimeMs
       lastBodyAmbientElapsed.current = frameTimeMs - bodyAmbientStartedAt.current
     }
-    const renderedExpression = bodyAmbientEnabled
+    const gazeProfile = activeGazeProfileRef.current
+    if (gazeProfile && frameTimeMs !== undefined) {
+      if (gazeStartedAt.current < 0) gazeStartedAt.current = frameTimeMs - lastGazeElapsed.current
+      lastGazeElapsed.current = frameTimeMs - gazeStartedAt.current
+    }
+    const gaze = gazeProfile
+      ? coordinatedGazeAt(gazeProfile, lastGazeElapsed.current, reduceMotion ? 0 : 1)
+      : null
+    const ambientExpression = bodyAmbientEnabled
       ? applyAmbientBodyMotion(
           pose.expression,
           lastBodyAmbientElapsed.current,
           resolvedAmbientStrength
         )
       : pose.expression
-    const eyeOffset = eyeAmbientEnabled
+    const renderedExpression = gaze
+      ? applyCoordinatedGaze(ambientExpression, gaze)
+      : ambientExpression
+    paintRenderedRotationGizmo(renderedRotationGizmo, renderedExpression)
+    const ambientEye = eyeAmbientEnabled
       ? ambientEyeOffset(
           eyeExpression,
           lastEyeAmbientElapsed.current,
           faceForward ? 1 : resolvedAmbientStrength
         )
       : { x: 0, y: 0 }
+    const eyeOffset = {
+      x: ambientEye.x + (gaze?.eyeOffset.x ?? 0),
+      y: ambientEye.y + (gaze?.eyeOffset.y ?? 0),
+    }
     const renderPose = avatar
       ? poseWithAvatarEyes(renderedExpression, avatar.eyes ?? defaultAvatarEyes)
       : poseFromExpression(renderedExpression)
@@ -470,7 +492,10 @@ export function useStudioController() {
     }
   })
 
-  const ambientLoopActive = !reduceMotion && hasAmbientMotion(editing?.draft ?? expression)
+  const ambientLoopActive =
+    !reduceMotion &&
+    (hasAmbientMotion(editing?.draft ?? expression) ||
+      (statePlaying && activeGazeProfileRef.current !== null))
   useEffect(() => {
     if (!ambientLoopActive) return
     const tick = (time: number) => {
@@ -902,6 +927,9 @@ export function useStudioController() {
         ? 'ready'
         : (nextSequences[0]?.id ?? ''))
     activeSequenceRef.current = nextActiveSequence
+    activeGazeProfileRef.current = resolveSequenceGazeProfile(nextActiveSequence)
+    gazeStartedAt.current = -1
+    if (!nextActiveSequence) lastGazeElapsed.current = 0
     setActiveState(nextActiveSequence?.id ?? null)
     setSelectedState(nextSelectedState)
     setPlaybackVisual(current => ({ ...current, position: null }))
@@ -1118,6 +1146,9 @@ export function useStudioController() {
     blinkControls.current?.stop()
     blinkAnimating.current = false
     blinkValue.jump(1)
+    activeGazeProfileRef.current = null
+    gazeStartedAt.current = -1
+    lastGazeElapsed.current = 0
     const avatar = avatarsRef.current.find(item => item.id === activeAvatarIdRef.current)
     updateActiveFaceForward(Boolean(avatar?.faceForward))
     paintPose(displayedPose.current, 1)
@@ -1135,6 +1166,9 @@ export function useStudioController() {
     }
     const playbackAvatar =
       avatarsRef.current.find(item => item.id === activeAvatarIdRef.current) ?? activeAvatar
+    activeGazeProfileRef.current = resolveSequenceGazeProfile(sequence)
+    gazeStartedAt.current = -1
+    if (!resume) lastGazeElapsed.current = 0
     setTalking(false)
     setThinking(false)
     if (playbackAvatar.logoMorph) setLogoFace(sequence.presentation !== 'logo')
@@ -1181,6 +1215,9 @@ export function useStudioController() {
         if (blinkTimer.current) clearTimeout(blinkTimer.current)
         blinkTimer.current = null
         playbackTimeline.current = { ...playbackTimeline.current, blinkDueAt: null }
+        activeGazeProfileRef.current = null
+        gazeStartedAt.current = -1
+        lastGazeElapsed.current = 0
         updateActiveFaceForward(Boolean(playbackAvatar.faceForward))
         paintPose(displayedPose.current)
         setStatePlaying(false)
@@ -1248,6 +1285,7 @@ export function useStudioController() {
       expression: { ...displayedPose.current.expression },
     }
     if (statePlaying) pauseState(false)
+    activeGazeProfileRef.current = null
     setActiveState(null)
   }
 
@@ -1262,6 +1300,8 @@ export function useStudioController() {
       return
     }
     activeSequenceRef.current = sequence
+    activeGazeProfileRef.current = resolveSequenceGazeProfile(sequence)
+    gazeStartedAt.current = -1
     setSelectedState(sequence.id)
     setActiveState(sequence.id)
     const playbackAvatar = avatarsRef.current.find(item => item.id === activeAvatarIdRef.current)
@@ -1280,6 +1320,7 @@ export function useStudioController() {
     const sequence = sequences.find(item => item.id === selectedState)
     if (sequence && initialStatePlayback.stateId !== null) {
       activeSequenceRef.current = sequence
+      activeGazeProfileRef.current = resolveSequenceGazeProfile(sequence)
       setActiveState(sequence.id)
       updateActiveFaceForward(resolveSequenceFaceForward(initialAvatar.faceForward, sequence))
       if (initialStatePlayback.playing) launchSequence(sequence, false, false)

@@ -3,6 +3,8 @@ import {
   ambientEyeOffset,
   applyAmbientBodyMotion,
   applyAmbientMotion,
+  applyCoordinatedGaze,
+  coordinatedGazeAt,
   hasAmbientMotion,
 } from '@/features/avatar/ambientMotion'
 import { poseFromExpression, renderAvatar } from '@/features/avatar/geometry'
@@ -103,5 +105,36 @@ describe('perpetual expression motion', () => {
     const expression = { ...defaultExpression, bodyMotion: 'slowDrift' as const }
 
     expect(ambientBodyOffset(expression, 1500)).not.toEqual({ x: 0, y: 0 })
+  })
+
+  it('keeps small glances eye-only and lets the head follow larger gaze targets', () => {
+    const smallGlance = coordinatedGazeAt('calm', 2700)
+    const largeGlance = coordinatedGazeAt('scanning', 1700)
+
+    expect(Math.abs(smallGlance.eyeOffset.x)).toBeGreaterThan(0)
+    expect(smallGlance.headOffset.y).toBeCloseTo(0)
+    expect(Math.abs(largeGlance.eyeOffset.x)).toBeGreaterThan(4)
+    expect(Math.abs(largeGlance.headOffset.y)).toBeGreaterThan(2)
+  })
+
+  it('moves the eyes first, then turns the head toward the same 3D target', () => {
+    const earlyGaze = coordinatedGazeAt('scanning', 650)
+    const followedGaze = coordinatedGazeAt('scanning', 1200)
+    const animated = applyCoordinatedGaze(defaultExpression, followedGaze)
+
+    expect(earlyGaze.eyeOffset.x).not.toBeCloseTo(0)
+    expect(earlyGaze.headOffset.y).toBeCloseTo(0)
+    expect(animated.headY).not.toBeCloseTo(defaultExpression.headY)
+    expect(Math.sign(animated.headY)).toBe(Math.sign(followedGaze.target.x))
+  })
+
+  it('makes chat gaze lead the head instead of preserving unrelated expression rotation', () => {
+    const expression = { ...defaultExpression, headX: 30, headY: -40, headZ: 20 }
+    const gaze = coordinatedGazeAt('attentive', 0)
+    const animated = applyCoordinatedGaze(expression, gaze)
+
+    expect(animated.headX).toBeCloseTo(5.4)
+    expect(animated.headY).toBeCloseTo(-7.2)
+    expect(animated.headZ).toBeCloseTo(3.6)
   })
 })

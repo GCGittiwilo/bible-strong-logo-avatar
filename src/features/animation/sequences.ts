@@ -7,6 +7,7 @@ import {
   statePools,
 } from '../avatar/presets'
 import type { Expression } from '../avatar/geometry'
+import { gazeProfiles, type GazeProfile } from '../avatar/ambientMotion'
 
 export type SequencePlaybackMode = 'loop' | 'once' | 'pingPong'
 export type SequenceTransition = 'spring' | 'smooth' | 'snappy'
@@ -46,6 +47,7 @@ export type AvatarSequence = {
   builtIn: boolean
   presentation?: SequencePresentation
   faceMode?: SequenceFaceMode
+  gazeProfile?: GazeProfile
   effect?: SequenceEffect
   playbackMode: SequencePlaybackMode
   steps: SequenceStep[]
@@ -74,6 +76,18 @@ const effects: SequenceEffect[] = [
 ]
 const builtInSequenceIds = new Set<string>(Object.values(stateGroups).flat())
 
+const stateGazeProfiles: Record<string, GazeProfile> = {
+  ready: 'calm',
+  listening: 'attentive',
+  transcribing: 'focused',
+  thinking: 'reflective',
+  searching: 'scanning',
+  working: 'focused',
+  speaking: 'conversational',
+  complete: 'celebratory',
+  error: 'alert',
+}
+
 const finite = (value: unknown, fallback: number, min: number, max: number) =>
   typeof value === 'number' && Number.isFinite(value)
     ? Math.min(Math.max(value, min), max)
@@ -101,6 +115,7 @@ export const createInitialSequences = (): AvatarSequence[] =>
         builtIn: true,
         presentation: 'face',
         faceMode: 'locked',
+        gazeProfile: stateGazeProfiles[id] ?? 'attentive',
         ...((stateEffects as Partial<Record<string, SequenceEffect>>)[id]
           ? { effect: (stateEffects as Partial<Record<string, SequenceEffect>>)[id] }
           : {}),
@@ -171,6 +186,11 @@ const parseSequence = (value: unknown, fallback: AvatarSequence): AvatarSequence
       : fallback.faceMode
         ? { faceMode: fallback.faceMode }
         : {}),
+    ...(gazeProfiles.includes(candidate?.gazeProfile as GazeProfile)
+      ? { gazeProfile: candidate?.gazeProfile as GazeProfile }
+      : fallback.gazeProfile
+        ? { gazeProfile: fallback.gazeProfile }
+        : {}),
     ...(effects.includes(candidate?.effect as SequenceEffect)
       ? { effect: candidate?.effect as SequenceEffect }
       : fallback.effect
@@ -234,6 +254,22 @@ export const resolveSequenceFaceForward = (
   sequence?: Pick<AvatarSequence, 'faceMode'> | null
 ) => Boolean(avatarFaceForward && sequence?.faceMode !== 'attached')
 
+export const resolveSequenceGazeProfile = (
+  sequence?: Pick<AvatarSequence, 'id' | 'presentation' | 'effect' | 'gazeProfile'> | null
+): GazeProfile | null => {
+  if (!sequence || sequence.presentation === 'logo') return null
+  if (sequence.gazeProfile) return sequence.gazeProfile
+  if (stateGazeProfiles[sequence.id]) return stateGazeProfiles[sequence.id]
+  if (sequence.effect === 'thinking') return 'reflective'
+  if (sequence.effect === 'searching') return 'scanning'
+  if (sequence.effect === 'working' || sequence.effect === 'transcribing') return 'focused'
+  if (sequence.effect === 'speaking') return 'conversational'
+  if (sequence.effect === 'complete') return 'celebratory'
+  if (sequence.effect === 'error') return 'alert'
+  if (sequence.effect === 'listening') return 'attentive'
+  return 'attentive'
+}
+
 export const readSequenceClock = () => performance.now()
 
 export const groupSequences = (sequences: AvatarSequence[]) => {
@@ -259,6 +295,7 @@ export const createSequence = (expressionId = initialExpressions[0].id): AvatarS
   builtIn: false,
   presentation: 'face',
   faceMode: 'locked',
+  gazeProfile: 'attentive',
   playbackMode: 'loop',
   steps: [
     {

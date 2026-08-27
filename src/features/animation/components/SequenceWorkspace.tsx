@@ -27,6 +27,7 @@ import {
   createSequenceStep,
   findExpressionIndex,
   resolveSequenceFaceForward,
+  resolveSequenceGazeProfile,
   type AvatarSequence,
   type SequenceStep,
 } from '@/features/animation/sequences'
@@ -257,6 +258,45 @@ export function SequenceWorkspace({
                 </SelectContent>
               </Select>
             </Field>
+            <Field>
+              <FieldTitle>{t('Regard coordonné')}</FieldTitle>
+              <Select
+                value={editing.draft.gazeProfile ?? 'attentive'}
+                items={[
+                  { value: 'calm', label: t('Calme') },
+                  { value: 'attentive', label: t('Attentif') },
+                  { value: 'reflective', label: t('Réfléchi') },
+                  { value: 'scanning', label: t('Balayage') },
+                  { value: 'focused', label: t('Concentré') },
+                  { value: 'conversational', label: t('Conversationnel') },
+                  { value: 'celebratory', label: t('Festif') },
+                  { value: 'alert', label: t('Alerte') },
+                  { value: 'orbit', label: t('Orbite') },
+                ]}
+                onValueChange={value =>
+                  value &&
+                  onChange({
+                    ...editing.draft,
+                    gazeProfile: value as AvatarSequence['gazeProfile'],
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="calm">{t('Calme')}</SelectItem>
+                  <SelectItem value="attentive">{t('Attentif')}</SelectItem>
+                  <SelectItem value="reflective">{t('Réfléchi')}</SelectItem>
+                  <SelectItem value="scanning">{t('Balayage')}</SelectItem>
+                  <SelectItem value="focused">{t('Concentré')}</SelectItem>
+                  <SelectItem value="conversational">{t('Conversationnel')}</SelectItem>
+                  <SelectItem value="celebratory">{t('Festif')}</SelectItem>
+                  <SelectItem value="alert">{t('Alerte')}</SelectItem>
+                  <SelectItem value="orbit">{t('Orbite')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
           </InspectorCard>
         </ControlSection>
 
@@ -292,6 +332,7 @@ export function SequenceWorkspace({
                         avatarEyes={avatarEyes}
                         logoMorph={logoMorph}
                         faceForward={resolveSequenceFaceForward(faceForward, editing.draft)}
+                        gazeProfile={resolveSequenceGazeProfile(editing.draft)}
                         showLogo={editing.draft.presentation === 'logo'}
                         effect={editing.draft.effect}
                         id={`sequence-${editing.draft.id}-${step.id}`}
@@ -433,6 +474,7 @@ export function SequenceWorkspace({
                     avatarEyes={avatarEyes}
                     logoMorph={logoMorph}
                     faceForward={resolveSequenceFaceForward(faceForward, editing.draft)}
+                    gazeProfile={resolveSequenceGazeProfile(editing.draft)}
                     id={`sequence-library-${index}`}
                   />
                   <span>{String(index).padStart(2, '0')}</span>

@@ -41,6 +41,7 @@ describe('avatar export', () => {
     expect(payload.animations.listening.effect).toBe('listening')
     expect(payload.animations.listening.presentation).toBe('face')
     expect(payload.animations.listening.faceMode).toBe('locked')
+    expect(payload.animations.listening.gazeProfile).toBe('attentive')
   })
 
   it('preserves face-locking in reusable exports', () => {
@@ -80,6 +81,8 @@ describe('avatar export', () => {
     expect(source).toContain('comicTalkingMouthPoseAt')
     expect(source).toContain('setThinking(next)')
     expect(source).toContain('comicThinkingMouthPoseAt')
+    expect(source).toContain('coordinatedGazeAt')
+    expect(source).toContain('applyCoordinatedGaze')
     expect(source).not.toContain('customElements.define')
     expect(source).not.toContain("from '")
     expect(() => parse(source, { sourceType: 'module' })).not.toThrow()

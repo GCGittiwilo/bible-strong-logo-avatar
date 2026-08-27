@@ -2,6 +2,24 @@ import type { BodyMotion, Expression, EyeMotion } from './geometry'
 
 export const eyeMotionModes = ['none', 'microSaccades', 'shake'] as const
 export const bodyMotionModes = ['none', 'slowDrift', 'shake'] as const
+export const gazeProfiles = [
+  'calm',
+  'attentive',
+  'reflective',
+  'scanning',
+  'focused',
+  'conversational',
+  'celebratory',
+  'alert',
+  'orbit',
+] as const
+export type GazeProfile = (typeof gazeProfiles)[number]
+export type CoordinatedGaze = {
+  target: Readonly<{ x: number; y: number }>
+  eyeOffset: Readonly<{ x: number; y: number }>
+  headOffset: Readonly<{ x: number; y: number; z: number }>
+  headBaseWeight: number
+}
 const eyeMotionSet = new Set<string>(eyeMotionModes)
 const bodyMotionSet = new Set<string>(bodyMotionModes)
 export const isEyeMotion = (value: unknown): value is EyeMotion =>
@@ -18,6 +36,153 @@ const hash = (value: number) => {
 const expressionSeed = (expression: Expression) =>
   expression.headX * 0.71 + expression.headY * 1.13 + expression.headZ * 1.37
 const EYE_MOTION_SEED = 17.29
+
+const gazeWaypoints: Record<
+  Exclude<GazeProfile, 'orbit'>,
+  { intervalMs: number; points: readonly (readonly [number, number])[] }
+> = {
+  calm: {
+    intervalMs: 2700,
+    points: [
+      [0, 0],
+      [0.2, -0.08],
+      [-0.16, 0.06],
+      [0.08, 0.02],
+    ],
+  },
+  attentive: {
+    intervalMs: 2100,
+    points: [
+      [0, 0],
+      [-0.38, -0.08],
+      [0.42, -0.04],
+      [0.12, 0.08],
+    ],
+  },
+  reflective: {
+    intervalMs: 2400,
+    points: [
+      [0, 0],
+      [-0.76, -0.7],
+      [0.44, -0.62],
+      [-0.42, -0.35],
+    ],
+  },
+  scanning: {
+    intervalMs: 1550,
+    points: [
+      [0, 0],
+      [-0.88, -0.2],
+      [0.9, -0.12],
+      [-0.7, 0.26],
+      [0.78, 0.12],
+    ],
+  },
+  focused: {
+    intervalMs: 1900,
+    points: [
+      [0, 0],
+      [-0.36, 0.18],
+      [0.34, 0.14],
+      [0.06, -0.12],
+      [-0.22, 0.04],
+    ],
+  },
+  conversational: {
+    intervalMs: 1750,
+    points: [
+      [0, 0],
+      [0, 0.08],
+      [-0.48, -0.02],
+      [0.45, -0.12],
+      [0.18, 0.14],
+    ],
+  },
+  celebratory: {
+    intervalMs: 1300,
+    points: [
+      [0, 0],
+      [0.72, -0.42],
+      [-0.72, -0.4],
+      [0, 0.22],
+    ],
+  },
+  alert: {
+    intervalMs: 1050,
+    points: [
+      [0, 0],
+      [-0.84, -0.04],
+      [0.84, -0.04],
+      [0, -0.38],
+      [0, 0.1],
+    ],
+  },
+}
+
+const interpolateWaypoint = (
+  points: readonly (readonly [number, number])[],
+  elapsedMs: number,
+  intervalMs: number
+) => {
+  const progress = Math.max(0, elapsedMs) / intervalMs
+  const step = Math.floor(progress)
+  const blend = smoothstep(progress - step)
+  const from = points[step % points.length]
+  const to = points[(step + 1) % points.length]
+  return {
+    x: from[0] + (to[0] - from[0]) * blend,
+    y: from[1] + (to[1] - from[1]) * blend,
+  }
+}
+
+const gazeTargetAt = (profile: GazeProfile, elapsedMs: number) => {
+  if (profile === 'orbit') {
+    const angle = (Math.max(0, elapsedMs) / 3600) * Math.PI * 2 - Math.PI / 2
+    return { x: Math.cos(angle) * 0.82, y: Math.sin(angle) * 0.5 }
+  }
+  const pattern = gazeWaypoints[profile]
+  return interpolateWaypoint(pattern.points, elapsedMs, pattern.intervalMs)
+}
+
+const headFollow = (value: number, threshold = 0.26) => {
+  const magnitude = Math.abs(value)
+  if (magnitude <= threshold) return 0
+  const active = (magnitude - threshold) / (1 - threshold)
+  return Math.sign(value) * active * active
+}
+
+export const coordinatedGazeAt = (
+  profile: GazeProfile,
+  elapsedMs: number,
+  strength = 1
+): CoordinatedGaze => {
+  const eyeTarget = gazeTargetAt(profile, elapsedMs)
+  // The eyes acquire a target first. The head follows the same target shortly afterward,
+  // and only once the glance travels beyond a comfortable eye-only range.
+  const headTarget = elapsedMs <= 190 ? { x: 0, y: 0 } : gazeTargetAt(profile, elapsedMs - 190)
+  const followX = headFollow(headTarget.x)
+  const followY = headFollow(headTarget.y, 0.22)
+  return {
+    target: { x: eyeTarget.x * strength, y: eyeTarget.y * strength },
+    eyeOffset: { x: eyeTarget.x * 14 * strength, y: eyeTarget.y * 9 * strength },
+    headOffset: {
+      x: -followY * 17 * strength,
+      y: followX * 24 * strength,
+      z: -followX * 3.2 * strength,
+    },
+    headBaseWeight: profile === 'orbit' ? 1 : 0.18,
+  }
+}
+
+export const applyCoordinatedGaze = (
+  expression: Expression,
+  gaze: CoordinatedGaze
+): Expression => ({
+  ...expression,
+  headX: expression.headX * gaze.headBaseWeight + gaze.headOffset.x,
+  headY: expression.headY * gaze.headBaseWeight + gaze.headOffset.y,
+  headZ: expression.headZ * gaze.headBaseWeight + gaze.headOffset.z,
+})
 
 const smoothNoise = (elapsedMs: number, axis: number, seed: number, interval: number) => {
   const progress = elapsedMs / interval

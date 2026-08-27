@@ -101,6 +101,11 @@ function mountAvatar(target, options = {}) {
   const faceForwardForAnimation = () => Boolean(
     DATA.avatar.faceForward && DATA.animations[currentAnimation]?.faceMode !== 'attached'
   );
+  const gazeProfileForAnimation = () => {
+    const animation = DATA.animations[currentAnimation];
+    if (!animation || animation.presentation === 'logo') return null;
+    return animation.gazeProfile || 'attentive';
+  };
   const syncFaceClip = () => {
     if (faceForwardForAnimation()) eyesLayer.removeAttribute('clip-path');
     else eyesLayer.setAttribute('clip-path', 'url(#' + clipId + ')');
@@ -128,6 +133,8 @@ function mountAvatar(target, options = {}) {
   let stepDueAt = null;
   let eyeAmbientStartedAt = performance.now();
   let bodyAmbientStartedAt = performance.now();
+  let gazeStartedAt = performance.now();
+  let gazePausedAt = null;
   const faceMotionExpression = { ...initialExpression, headX: 0, headY: 0, headZ: 0 };
   let eyeAmbientSignature = initialExpression.eyeMotion;
   let bodyAmbientSignature = initialExpression.bodyMotion;
@@ -169,18 +176,29 @@ function mountAvatar(target, options = {}) {
   const render = (time = performance.now()) => {
     const eyeElapsed = time - eyeAmbientStartedAt;
     const bodyElapsed = time - bodyAmbientStartedAt;
-    const expression = currentPose.expression.bodyMotion !== 'none'
+    const ambientExpression = currentPose.expression.bodyMotion !== 'none'
       ? AvatarProceduralEngine.applyAmbientBodyMotion(currentPose.expression, bodyElapsed, ambientStrength)
       : currentPose.expression;
+    const gazeProfile = playing || paused ? gazeProfileForAnimation() : null;
+    const gaze = !reducedMotion && gazeProfile
+      ? AvatarProceduralEngine.coordinatedGazeAt(gazeProfile, time - gazeStartedAt)
+      : null;
+    const expression = gaze
+      ? AvatarProceduralEngine.applyCoordinatedGaze(ambientExpression, gaze)
+      : ambientExpression;
     const faceForward = faceForwardForAnimation();
     const eyeMotionExpression = faceForward
       ? { ...faceMotionExpression, eyeMotion: currentPose.expression.eyeMotion }
       : currentPose.expression;
-    const eyeOffset = AvatarProceduralEngine.ambientEyeOffset(
+    const ambientEyeOffset = AvatarProceduralEngine.ambientEyeOffset(
       eyeMotionExpression,
       eyeElapsed,
       faceForward ? 1 : ambientStrength
     );
+    const eyeOffset = {
+      x: ambientEyeOffset.x + (gaze?.eyeOffset.x || 0),
+      y: ambientEyeOffset.y + (gaze?.eyeOffset.y || 0),
+    };
     const renderedPose = AvatarProceduralEngine.poseFromExpression(expression);
     const geometry = AvatarProceduralEngine.renderAvatar(renderedPose, DATA.avatar.surface, blinkAmount, {
       includeWire: false,
@@ -294,11 +312,12 @@ function mountAvatar(target, options = {}) {
       }
     }
     const ambientActive = AvatarProceduralEngine.hasAmbientMotion(currentPose.expression);
-    if (faceTransition || transitionState || blinkState || (!ambientActive && !talking && !thinking) || time - lastAmbientFrame >= 1000 / 30) {
+    const gazeActive = Boolean(gazeProfileForAnimation()) && !reducedMotion && playing;
+    if (faceTransition || transitionState || blinkState || (!ambientActive && !gazeActive && !talking && !thinking) || time - lastAmbientFrame >= 1000 / 30) {
       render(time);
-      if (ambientActive || talking || thinking) lastAmbientFrame = time;
+      if (ambientActive || gazeActive || talking || thinking) lastAmbientFrame = time;
     }
-    if (faceTransition || transitionState || blinkState || ambientActive || talking || thinking) frameRequest = requestAnimationFrame(tick);
+    if (faceTransition || transitionState || blinkState || ambientActive || gazeActive || talking || thinking) frameRequest = requestAnimationFrame(tick);
   };
   const requestTick = () => {
     if (frameRequest === null) frameRequest = requestAnimationFrame(tick);
@@ -384,6 +403,9 @@ function mountAvatar(target, options = {}) {
       if (!DATA.animations[animationName]) throw new Error('Unknown animation: ' + animationName);
       clearSchedule();
       if (animationName === currentAnimation && paused) {
+        const resumedAt = performance.now();
+        if (gazePausedAt !== null) gazeStartedAt += resumedAt - gazePausedAt;
+        gazePausedAt = null;
         paused = false;
         playing = true;
         if (pausedTransition) animateTo(pausedTransition.expressionId, pausedTransition.durationMs, pausedTransition.transition);
@@ -407,6 +429,8 @@ function mountAvatar(target, options = {}) {
       }
       currentAnimation = animationName;
       syncFaceClip();
+      gazeStartedAt = performance.now();
+      gazePausedAt = null;
       const animation = DATA.animations[currentAnimation];
       if (animation.presentation === 'logo') api.setFace(false);
       else if (animation.presentation === 'face') api.setFace(true);
@@ -421,6 +445,7 @@ function mountAvatar(target, options = {}) {
     },
     pause() {
       const now = performance.now();
+      gazePausedAt = now;
       if (playing && stepDueAt !== null) pausedRemainingMs = Math.max(stepDueAt - now, 0);
       pausedBlinkDelay = blinkDueAt === null ? 0 : Math.max(blinkDueAt - now, 0);
       if (transitionState) {
@@ -454,6 +479,8 @@ function mountAvatar(target, options = {}) {
       pausedBlinkDelay = 0;
       paused = false;
       playing = false;
+      gazeStartedAt = performance.now();
+      gazePausedAt = null;
       stepIndex = 0;
       direction = 1;
       const first = DATA.animations[currentAnimation].steps[0];

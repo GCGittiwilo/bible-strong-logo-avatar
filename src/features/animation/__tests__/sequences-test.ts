@@ -6,6 +6,7 @@ import {
   parseSequences,
   remapSequencesAfterExpressionDelete,
   resolveSequenceFaceForward,
+  resolveSequenceGazeProfile,
 } from '@/features/animation/sequences'
 import { initialExpressions } from '@/features/avatar/presets'
 
@@ -113,6 +114,9 @@ describe('editable avatar sequences', () => {
       'error',
     ])
     expect(sequences.find(sequence => sequence.id === 'thinking')?.effect).toBe('thinking')
+    expect(sequences.find(sequence => sequence.id === 'thinking')?.gazeProfile).toBe('reflective')
+    expect(sequences.find(sequence => sequence.id === 'searching')?.gazeProfile).toBe('scanning')
+    expect(sequences.every(sequence => resolveSequenceGazeProfile(sequence) !== null)).toBe(true)
     expect(new Set(sequences.map(sequence => sequence.group))).toEqual(new Set(['Chat Pipeline']))
   })
 
@@ -128,9 +132,11 @@ describe('editable avatar sequences', () => {
         ...createInitialSequences()[0],
         id: 'attached-spin',
         faceMode: 'attached',
+        gazeProfile: 'orbit',
       },
     ])
 
     expect(sequence.faceMode).toBe('attached')
+    expect(sequence.gazeProfile).toBe('orbit')
   })
 })

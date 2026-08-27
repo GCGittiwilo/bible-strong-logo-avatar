@@ -200,6 +200,11 @@ describe('avatar behavior revisions', () => {
         .filter(sequence => sequence.group === 'Face Attached Spins')
         .every(sequence => sequence.faceMode === 'attached')
     ).toBe(true)
+    expect(
+      behavior.sequences
+        .filter(sequence => sequence.group === 'Face Locked Spins')
+        .every(sequence => sequence.gazeProfile === 'orbit')
+    ).toBe(true)
     expect(behavior.sequences.at(-1)).toMatchObject({
       id: 'loading',
       group: 'Loading',

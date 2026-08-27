@@ -241,6 +241,7 @@ const spinSequence = (
   builtIn: true,
   presentation: options.presentation ?? 'face',
   faceMode,
+  ...(group === 'Loading' ? {} : { gazeProfile: 'orbit' as const }),
   playbackMode: 'loop',
   steps: expressionIds.map((expressionId, index) => ({
     id: `${id}-step-${index}`,

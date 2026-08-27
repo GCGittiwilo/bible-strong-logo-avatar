@@ -9,6 +9,7 @@ import {
   type AvatarEyeDefaults,
 } from '@/features/avatar/avatars'
 import { type BodyNode } from '@/features/avatar/body'
+import { applyCoordinatedGaze, type CoordinatedGaze } from '@/features/avatar/ambientMotion'
 import { poseFromExpression, renderAvatar, type Expression } from '@/features/avatar/geometry'
 import { type SurfaceConfig } from '@/features/avatar/surfaces'
 
@@ -61,7 +62,8 @@ export const getPreviewGeometry = (
   surface: SurfaceConfig,
   bodyNodes: BodyNode[],
   eyes: AvatarEyeDefaults = defaultAvatarEyes,
-  faceForward = false
+  faceForward = false,
+  gaze?: CoordinatedGaze
 ) => {
   let surfaceCache = previewGeometryCache.get(expression)
   if (!surfaceCache) {
@@ -73,13 +75,15 @@ export const getPreviewGeometry = (
     bodyCache = new WeakMap()
     surfaceCache.set(surface, bodyCache)
   }
-  const positionKey = `${JSON.stringify(eyes)}:${faceForward}`
+  const positionKey = `${JSON.stringify(eyes)}:${faceForward}:${JSON.stringify(gaze ?? null)}`
   const cached = bodyCache.get(bodyNodes)
   if (cached?.positionKey === positionKey) return cached.geometry
-  const geometry = renderAvatar(poseWithAvatarEyes(expression, eyes), surface, 1, {
+  const renderedExpression = gaze ? applyCoordinatedGaze(expression, gaze) : expression
+  const geometry = renderAvatar(poseWithAvatarEyes(renderedExpression, eyes), surface, 1, {
     includeWire: false,
     bodyNodes,
     faceForward,
+    eyeOffset: gaze?.eyeOffset,
   })
   bodyCache.set(bodyNodes, { positionKey, geometry })
   return geometry

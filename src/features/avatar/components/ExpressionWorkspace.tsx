@@ -22,6 +22,7 @@ import {
   type AvatarLogoMorph,
 } from '@/features/avatar/avatars'
 import { type BodyNode } from '@/features/avatar/body'
+import { coordinatedGazeAt, type GazeProfile } from '@/features/avatar/ambientMotion'
 import { StatusEffectGlyph } from '@/features/avatar/components/StatusEffectGlyph'
 import { scaleEye, updateEyeDimension } from '@/features/avatar/expressionEditing'
 import { type Expression } from '@/features/avatar/geometry'
@@ -47,6 +48,7 @@ export function ExpressionPreview({
   avatarEyes,
   logoMorph,
   faceForward,
+  gazeProfile,
   showLogo = false,
   effect,
   id,
@@ -58,11 +60,20 @@ export function ExpressionPreview({
   avatarEyes: AvatarEyeDefaults
   logoMorph?: AvatarLogoMorph
   faceForward?: boolean
+  gazeProfile?: GazeProfile | null
   showLogo?: boolean
   effect?: SequenceEffect
   id: string
 }) {
-  const geometry = getPreviewGeometry(expression, surface, bodyNodes, avatarEyes, faceForward)
+  const previewGaze = gazeProfile ? coordinatedGazeAt(gazeProfile, 1650) : undefined
+  const geometry = getPreviewGeometry(
+    expression,
+    surface,
+    bodyNodes,
+    avatarEyes,
+    faceForward,
+    previewGaze
+  )
   const resolvedColors = resolveColors(expression, colors)
   const clipId = `preview-${id}`
   const centerNodeIds = new Set(logoMorph?.centerNodeIds ?? [])
