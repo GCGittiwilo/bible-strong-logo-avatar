@@ -10,6 +10,10 @@ import { idleComicMouthPose, type AvatarMouth, type ComicMouthPose } from './mou
 
 export type Quaternion = readonly [number, number, number, number]
 export type Point3 = readonly [number, number, number]
+const normalizePoint3 = ([x, y, z]: Point3): Point3 => {
+  const length = Math.hypot(x, y, z) || 1
+  return [x / length, y / length, z / length]
+}
 export type EyeMotion = 'none' | 'microSaccades' | 'shake'
 export type BodyMotion = 'none' | 'slowDrift' | 'shake'
 
@@ -576,7 +580,8 @@ const projectFacePoint = (
   // The logo's eye rig lives on the front cap of an invisible sphere. Its front
   // tangent stays aligned with the head surface while the rest of the globe sits
   // behind it, so only the curved eye contours are ever rendered.
-  const radius = Math.max(surface.width, surface.height) * 0.64
+  const radius = Math.max(surface.width, surface.height) * 0.82
+  const curvatureBoost = 2
   const sphere: SurfaceConfig = {
     type: 'sphere',
     width: radius * 2,
@@ -585,10 +590,15 @@ const projectFacePoint = (
     roundness: 1,
   }
   const sphereSample = surfaceFrontSampleAt(sphere, faceX, faceY)
-  const centerZ = surface.depth / 2 - radius
+  const frontZ = surface.depth / 2
+  const depthFromFront = (radius - sphereSample.point[2]) * curvatureBoost
   return projectLocalSurfacePoint(pose, {
-    point: [sphereSample.point[0], sphereSample.point[1], sphereSample.point[2] + centerZ],
-    normal: sphereSample.normal,
+    point: [sphereSample.point[0], sphereSample.point[1], frontZ - depthFromFront],
+    normal: normalizePoint3([
+      sphereSample.normal[0] * curvatureBoost,
+      sphereSample.normal[1] * curvatureBoost,
+      sphereSample.normal[2],
+    ]),
   })
 }
 
