@@ -84,7 +84,7 @@ export function ExpressionPreview({
     <svg viewBox="-150 -150 300 300" aria-hidden="true">
       <defs>
         <clipPath id={clipId}>
-          <path d={geometry.headPath} />
+          <path d={geometry.faceClipPath} />
         </clipPath>
       </defs>
       {geometry.backPaths.map((pathValue, index) => (
@@ -102,7 +102,10 @@ export function ExpressionPreview({
         opacity={logoMorph?.primaryOpacity ?? 1}
         style={{ fill: resolvedColors.body }}
       />
-      <g clipPath={faceForward ? undefined : `url(#${clipId})`} opacity={faceVisible ? 1 : 0}>
+      <g
+        clipPath={logoMorph || !faceForward ? `url(#${clipId})` : undefined}
+        opacity={faceVisible ? 1 : 0}
+      >
         <path
           className="preview-eye"
           d={geometry.leftPath}

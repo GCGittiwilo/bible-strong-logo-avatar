@@ -56,6 +56,7 @@ export const serializeAvatarSnapshot = (
   faceReveal = 1
 ) => {
   const headPath = scene.headPath.get()
+  const faceClipPath = scene.faceClipPath.get()
   const centerNodeIds = new Set(avatar?.logoMorph?.centerNodeIds ?? [])
   const nodeOpacity = (id: string | null | undefined) =>
     centerNodeIds.has(id ?? '') ? 1 - faceReveal : 1
@@ -66,7 +67,7 @@ export const serializeAvatarSnapshot = (
       path(item.get(), colors.body, nodeOpacity(scene.backNodeIds.current[index]))
     ),
     path(headPath, colors.body, avatar?.logoMorph?.primaryOpacity ?? 1),
-    `<g${avatar?.faceForward ? '' : ' clip-path="url(#snapshot-head-clip)"'} opacity="${avatar?.logoMorph ? faceReveal : 1}">${path(scene.leftPath.get(), colors.eyes, scene.leftOpacity.get())}${path(scene.rightPath.get(), colors.eyes, scene.rightOpacity.get())}${mouth ? `${path(scene.mouthPath.get(), mouth.color, scene.mouthOpacity.get())}${path(scene.tonguePath.get(), mouth.tongueColor, scene.mouthOpacity.get())}` : ''}</g>`,
+    `<g${avatar?.logoMorph || !avatar?.faceForward ? ' clip-path="url(#snapshot-head-clip)"' : ''} opacity="${avatar?.logoMorph ? faceReveal : 1}">${path(scene.leftPath.get(), colors.eyes, scene.leftOpacity.get())}${path(scene.rightPath.get(), colors.eyes, scene.rightOpacity.get())}${mouth ? `${path(scene.mouthPath.get(), mouth.color, scene.mouthOpacity.get())}${path(scene.tonguePath.get(), mouth.tongueColor, scene.mouthOpacity.get())}` : ''}</g>`,
     ...scene.frontPaths.map((item, index) =>
       path(item.get(), colors.body, nodeOpacity(scene.frontNodeIds.current[index]))
     ),
@@ -74,7 +75,7 @@ export const serializeAvatarSnapshot = (
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-150 -150 300 300" width="${options.size}" height="${options.size}" role="img" aria-label="${escapeXml(name)}">
-  <defs>${gradientMarkup(options)}<clipPath id="snapshot-head-clip"><path d="${escapeXml(headPath)}"/></clipPath></defs>
+  <defs>${gradientMarkup(options)}<clipPath id="snapshot-head-clip"><path d="${escapeXml(faceClipPath)}"/></clipPath></defs>
   ${backgroundMarkup(options)}
   <g transform="translate(${offsetX} ${offsetY})">${body}</g>
 </svg>`

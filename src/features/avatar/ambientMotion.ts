@@ -271,14 +271,28 @@ export const solveGazeRig = (
   const eyeYaw = yaw.eye
   const eyePitch = pitch.eye
   const roll = clampDegrees(-visibleHeadYaw * 0.08, 4)
+  const yawFollowProgress = Math.min(
+    1,
+    Math.abs(visibleHeadYaw) / (gazeRigLimits.neck.yaw + gazeRigLimits.body.yaw)
+  )
+  const pitchFollowLimit =
+    eyePitch < 0
+      ? gazeRigLimits.neck.up + gazeRigLimits.body.up
+      : gazeRigLimits.neck.down + gazeRigLimits.body.down
+  const pitchFollowProgress = Math.min(1, Math.abs(visibleHeadPitch) / pitchFollowLimit)
+  // As the head catches a large look, let the rendered eye settle inward instead
+  // of pinning its silhouette against the logo frame. The semantic eye angle stays
+  // intact for integrations and readouts.
+  const horizontalVisualFollow = 1 - yawFollowProgress * 0.38
+  const verticalVisualFollow = 1 - pitchFollowProgress * 0.5
   return {
     target: resolvedTarget,
     eyeOffset: {
-      x: (eyeYaw / gazeRigLimits.eye.yaw) * 22,
+      x: (eyeYaw / gazeRigLimits.eye.yaw) * 22 * horizontalVisualFollow,
       y:
         eyePitch < 0
-          ? (eyePitch / gazeRigLimits.eye.up) * 26
-          : (eyePitch / gazeRigLimits.eye.down) * 34,
+          ? (eyePitch / gazeRigLimits.eye.up) * 26 * verticalVisualFollow
+          : (eyePitch / gazeRigLimits.eye.down) * 34 * verticalVisualFollow,
     },
     headOffset: {
       // Screen Y grows downward, while positive model-space X rotation visually

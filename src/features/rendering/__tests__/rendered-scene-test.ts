@@ -84,6 +84,30 @@ describe('rendered avatar scene', () => {
     expect(spinning.rightPath).toBe(forward.rightPath)
   })
 
+  it('keeps the Bible Strong face inside one continuous frame aperture', () => {
+    const avatar = defaultStudioDocument.library.avatars.find(item => item.name === 'Bible Strong')!
+    const forward = renderAvatar(
+      poseFromExpression(defaultExpression),
+      avatar.body.primary as SurfaceConfig,
+      1,
+      { bodyNodes: avatar.body.nodes as BodyNode[] }
+    )
+    const turned = renderAvatar(
+      poseFromExpression({ ...defaultExpression, headY: 68 }),
+      avatar.body.primary as SurfaceConfig,
+      1,
+      { bodyNodes: avatar.body.nodes as BodyNode[] }
+    )
+    const scene = createRenderedScene(forward)
+
+    expect(forward.faceClipPath).not.toBe(forward.headPath)
+    expect(forward.faceClipPath.match(/L/g)).toHaveLength(3)
+    expect(turned.faceClipPath).not.toBe(forward.faceClipPath)
+
+    paintRenderedScene(scene, turned)
+    expect(scene.faceClipPath.get()).toBe(turned.faceClipPath)
+  })
+
   it('anchors the face center while preserving animation expression changes', () => {
     const firstExpression = {
       ...defaultExpression,

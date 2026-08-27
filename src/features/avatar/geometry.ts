@@ -65,6 +65,8 @@ export type AvatarGeometry = {
   backNodeIds: (string | null)[]
   frontNodeIds: (string | null)[]
   headPath: string
+  /** Stable face aperture used to keep eyes and mouth inside the logo frame. */
+  faceClipPath: string
   leftPath: string
   rightPath: string
   leftVisible: boolean
@@ -1300,6 +1302,38 @@ const accessoryPath = (pose: AvatarPose, node: BodyNode) => {
 
 const ACCESSORY_FRONT_CROSSING_RATIO = 0.1
 
+const logoFrameFaceClipPath = (pose: AvatarPose, nodes: BodyNode[]) => {
+  const frameNodes = nodes.filter(node => node.id.startsWith('logo-frame-'))
+  const vertical = frameNodes.filter(node => node.surface.height > node.surface.width * 1.5)
+  const horizontal = frameNodes.filter(node => node.surface.width > node.surface.height * 1.5)
+  const leftNodes = vertical.filter(node => node.position[0] < 0)
+  const rightNodes = vertical.filter(node => node.position[0] > 0)
+  const topNodes = horizontal.filter(node => node.position[1] < 0)
+  const bottomNodes = horizontal.filter(node => node.position[1] > 0)
+  if (!leftNodes.length || !rightNodes.length || !topNodes.length || !bottomNodes.length) return ''
+
+  // Treat the split logo bars as one continuous eye-socket boundary. Without this
+  // aperture an eye can leak through the intentional gaps between individual bars.
+  const left = Math.max(...leftNodes.map(node => node.position[0] + node.surface.width / 2))
+  const right = Math.min(...rightNodes.map(node => node.position[0] - node.surface.width / 2))
+  const top = Math.max(...topNodes.map(node => node.position[1] + node.surface.height / 2))
+  const bottom = Math.min(...bottomNodes.map(node => node.position[1] - node.surface.height / 2))
+  const frontZ = Math.max(...frameNodes.map(node => node.position[2] + node.surface.depth / 2))
+  if (left >= right || top >= bottom) return ''
+
+  const aperture: Point3[] = [
+    [left, top, frontZ],
+    [right, top, frontZ],
+    [right, bottom, frontZ],
+    [left, bottom, frontZ],
+  ]
+  return path(
+    aperture.map(point =>
+      project(rotateWithQuaternion(pose.orientation, point), pose.expression.perspective)
+    )
+  )
+}
+
 const accessoryCameraDepthRadius = (pose: AvatarPose, node: BodyNode) => {
   const localOrientation = quaternionFromEuler(
     radians(node.rotation[0]),
@@ -1363,12 +1397,15 @@ export const renderAvatar = (
   const accessories = accessoryLayers(pose, options.bodyNodes ?? [])
   const compositePaths = compositeBackPaths(pose, surface)
   const mouth = comicMouthGeometry(facePose, surface, options.mouth, options.mouthPose)
+  const resolvedHeadPath = headPath(pose, surface)
+  const logoFaceClipPath = logoFrameFaceClipPath(pose, options.bodyNodes ?? [])
   return {
     backPaths: [...compositePaths, ...accessories.backPaths],
     frontPaths: accessories.frontPaths,
     backNodeIds: [...compositePaths.map(() => null), ...accessories.backNodeIds],
     frontNodeIds: accessories.frontNodeIds,
-    headPath: headPath(pose, surface),
+    headPath: resolvedHeadPath,
+    faceClipPath: logoFaceClipPath || resolvedHeadPath,
     leftPath: path(left),
     rightPath: path(right),
     leftVisible: leftSamples.reduce((total, sample) => total + sample.normal[2], 0) > 0,

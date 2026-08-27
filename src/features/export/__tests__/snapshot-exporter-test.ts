@@ -114,5 +114,6 @@ describe('avatar snapshot export', () => {
     expect(logoSvg).toContain('opacity="0"><path')
     expect(faceSvg).toContain('opacity="1"><path')
     expect(faceSvg).toContain('opacity="0"/>')
+    expect(faceSvg).toContain('clip-path="url(#snapshot-head-clip)"')
   })
 })

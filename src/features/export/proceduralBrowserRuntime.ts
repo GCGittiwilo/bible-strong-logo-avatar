@@ -108,7 +108,7 @@ function mountAvatar(target, options = {}) {
     return animation.gazeProfile || 'attentive';
   };
   const syncFaceClip = () => {
-    if (faceForwardForAnimation()) eyesLayer.removeAttribute('clip-path');
+    if (!DATA.avatar.logoMorph && faceForwardForAnimation()) eyesLayer.removeAttribute('clip-path');
     else eyesLayer.setAttribute('clip-path', 'url(#' + clipId + ')');
   };
   syncFaceClip();
@@ -242,7 +242,7 @@ function mountAvatar(target, options = {}) {
     head.setAttribute('d', geometry.headPath);
     head.setAttribute('fill', currentColors.body);
     head.setAttribute('opacity', String(DATA.avatar.logoMorph?.primaryOpacity ?? 1));
-    clipHead.setAttribute('d', geometry.headPath);
+    clipHead.setAttribute('d', geometry.faceClipPath);
     eyesLayer.setAttribute('opacity', String(DATA.avatar.logoMorph ? faceProgress : 1));
     leftEye.setAttribute('d', geometry.leftPath);
     rightEye.setAttribute('d', geometry.rightPath);

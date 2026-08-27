@@ -6,6 +6,7 @@ import type { AvatarGeometry } from '../avatar/geometry'
 
 export type RenderedScene = {
   headPath: MotionValue<string>
+  faceClipPath: MotionValue<string>
   backPaths: MotionValue<string>[]
   frontPaths: MotionValue<string>[]
   backPathOpacities: MotionValue<number>[]
@@ -49,6 +50,7 @@ const statusAnchor = (geometry: AvatarGeometry) => {
 
 export const createRenderedScene = (geometry: AvatarGeometry): RenderedScene => ({
   headPath: motionValue(geometry.headPath),
+  faceClipPath: motionValue(geometry.faceClipPath),
   backPaths: Array.from({ length: bodyPathSlots }, (_, index) =>
     motionValue(geometry.backPaths[index] ?? '')
   ),
@@ -91,6 +93,7 @@ export const paintRenderedOffset = (scene: RenderedScene, offset: { x: number; y
 export const paintRenderedScene = (scene: RenderedScene, geometry: AvatarGeometry) => {
   const anchor = statusAnchor(geometry)
   scene.headPath.set(geometry.headPath)
+  scene.faceClipPath.set(geometry.faceClipPath)
   scene.backNodeIds.current = geometry.backNodeIds
   scene.frontNodeIds.current = geometry.frontNodeIds
   scene.backPaths.forEach((path, index) => path.set(geometry.backPaths[index] ?? ''))

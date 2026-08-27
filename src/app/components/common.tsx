@@ -69,7 +69,7 @@ export function SnapshotPreview({
       <svg viewBox="-150 -150 300 300" aria-hidden="true">
         <defs>
           <clipPath id={clipId}>
-            <motion.path d={scene.headPath} />
+            <motion.path d={scene.faceClipPath} />
           </clipPath>
           <linearGradient id={linearId} x1="0" y1="0" x2="1" y2="1">
             <stop offset="0" stopColor={colorFrom} />
@@ -98,7 +98,7 @@ export function SnapshotPreview({
             opacity={avatar.logoMorph?.primaryOpacity ?? 1}
           />
           <motion.g
-            clipPath={avatar.faceForward ? undefined : `url(#${clipId})`}
+            clipPath={avatar.logoMorph || !avatar.faceForward ? `url(#${clipId})` : undefined}
             opacity={avatar.logoMorph ? faceReveal : 1}
           >
             <motion.path d={scene.leftPath} fill={colors.eyes} opacity={scene.leftOpacity} />

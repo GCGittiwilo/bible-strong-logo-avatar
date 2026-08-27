@@ -542,6 +542,7 @@ export function AvatarCanvas({
     backNodeIds,
     frontNodeIds,
     headPath,
+    faceClipPath,
     leftPath,
     rightPath,
     leftOpacity,
@@ -792,7 +793,7 @@ export function AvatarCanvas({
       >
         <defs>
           <clipPath id="avatar-head-clip">
-            <motion.path d={headPath} />
+            <motion.path d={faceClipPath} />
           </clipPath>
         </defs>
         <motion.g>
@@ -816,7 +817,7 @@ export function AvatarCanvas({
               }}
             />
             <motion.g
-              clipPath={faceForward ? undefined : 'url(#avatar-head-clip)'}
+              clipPath={logoMorph || !faceForward ? 'url(#avatar-head-clip)' : undefined}
               style={
                 logoMorph
                   ? { opacity: faceReveal, scale: faceScale, transformOrigin: 'center' }

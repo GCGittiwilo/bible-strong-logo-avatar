@@ -188,6 +188,16 @@ describe('perpetual expression motion', () => {
     expect(renderedDown.headX).toBeLessThan(0)
   })
 
+  it('recenters the rendered eye as the head catches an extreme look', () => {
+    const eyeLed = solveGazeRig({ x: 0, y: 0.45 })
+    const headCaughtUp = solveGazeRig({ x: 0, y: 1 })
+
+    expect(headCaughtUp.eyeSocket.pitch).toBeGreaterThan(eyeLed.eyeSocket.pitch)
+    expect(headCaughtUp.headOffset.x).toBeLessThan(eyeLed.headOffset.x)
+    expect(headCaughtUp.eyeOffset.y).toBeLessThan(eyeLed.eyeOffset.y)
+    expect(headCaughtUp.eyeOffset.y).toBeGreaterThan(9)
+  })
+
   it('keeps every automated head direction linked to its current eye direction', () => {
     gazeProfiles.forEach(profile => {
       for (let elapsedMs = 0; elapsedMs <= 6000; elapsedMs += 120) {
