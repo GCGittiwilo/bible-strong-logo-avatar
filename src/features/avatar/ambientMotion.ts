@@ -153,6 +153,56 @@ const gazeTargetAt = (profile: GazeProfile, elapsedMs: number) => {
 
 const clampDegrees = (value: number, limit: number) => Math.max(-limit, Math.min(limit, value))
 
+export const gazeRigLimits = {
+  target: { yaw: 114, up: 82, down: 105 },
+  eye: {
+    yaw: 46,
+    up: 32,
+    down: 48,
+    comfortYaw: 30,
+    comfortUp: 22,
+    comfortDown: 34,
+  },
+  neck: { yaw: 64, up: 45, down: 55 },
+  body: { yaw: 8, up: 8, down: 8 },
+} as const
+
+const directionalLimit = (value: number, negativeLimit: number, positiveLimit: number) =>
+  Math.max(-negativeLimit, Math.min(positiveLimit, value))
+
+const distributeEyeAndFollow = (
+  targetDegrees: number,
+  comfortNegative: number,
+  comfortPositive: number,
+  eyeNegative: number,
+  eyePositive: number
+) => {
+  const direction = Math.sign(targetDegrees)
+  const magnitude = Math.abs(targetDegrees)
+  const comfort = direction < 0 ? comfortNegative : comfortPositive
+  const hardLimit = direction < 0 ? eyeNegative : eyePositive
+  if (magnitude <= comfort) return { eye: targetDegrees, follow: 0 }
+
+  // The eye keeps leading after the neck joins in, then settles at its socket limit.
+  const eyeMagnitude = Math.min(hardLimit, comfort + (magnitude - comfort) * 0.32)
+  const eye = direction * eyeMagnitude
+  return { eye, follow: targetDegrees - eye }
+}
+
+const splitHeadAndBody = (
+  followDegrees: number,
+  neckNegative: number,
+  neckPositive: number,
+  bodyNegative: number,
+  bodyPositive: number
+) => {
+  const neck = directionalLimit(followDegrees, neckNegative, neckPositive)
+  return {
+    neck,
+    body: directionalLimit(followDegrees - neck, bodyNegative, bodyPositive),
+  }
+}
+
 export const coordinatedGazeAt = (
   profile: GazeProfile,
   elapsedMs: number,
@@ -166,8 +216,9 @@ export const coordinatedGazeAt = (
 
 /**
  * Resolves one authoritative gaze target through the anatomical rig. The head never
- * samples a separate animation clock: it can only move when this eye target exceeds
- * the socket range.
+ * samples a separate animation clock. The eyes lead each look; the neck begins
+ * following inside the socket's hard limit, and the forward-facing body only adds
+ * the final few degrees needed for a large look.
  */
 export const solveGazeRig = (
   target: Readonly<{ x: number; y: number }>,
@@ -178,26 +229,56 @@ export const solveGazeRig = (
     x: Math.max(-1, Math.min(1, target.x)) * strength,
     y: Math.max(-1, Math.min(1, target.y)) * strength,
   }
-  const targetYaw = resolvedTarget.x * 58
-  const targetPitch = resolvedTarget.y * 42
-  const initialEyeYaw = clampDegrees(targetYaw, 18)
-  const initialEyePitch = clampDegrees(targetPitch, 13)
-  const desiredHeadYaw = targetYaw - initialEyeYaw
-  const desiredHeadPitch = targetPitch - initialEyePitch
-  const neckYaw = clampDegrees(desiredHeadYaw, 36)
-  const neckPitch = clampDegrees(desiredHeadPitch, 24)
-  const bodyYaw = clampDegrees(desiredHeadYaw - neckYaw, 10)
-  const bodyPitch = clampDegrees(desiredHeadPitch - neckPitch, 6)
+  const targetYaw = resolvedTarget.x * gazeRigLimits.target.yaw
+  const targetPitch =
+    resolvedTarget.y < 0
+      ? resolvedTarget.y * gazeRigLimits.target.up
+      : resolvedTarget.y * gazeRigLimits.target.down
+  const yaw = distributeEyeAndFollow(
+    targetYaw,
+    gazeRigLimits.eye.comfortYaw,
+    gazeRigLimits.eye.comfortYaw,
+    gazeRigLimits.eye.yaw,
+    gazeRigLimits.eye.yaw
+  )
+  const pitch = distributeEyeAndFollow(
+    targetPitch,
+    gazeRigLimits.eye.comfortUp,
+    gazeRigLimits.eye.comfortDown,
+    gazeRigLimits.eye.up,
+    gazeRigLimits.eye.down
+  )
+  const yawFollow = splitHeadAndBody(
+    yaw.follow,
+    gazeRigLimits.neck.yaw,
+    gazeRigLimits.neck.yaw,
+    gazeRigLimits.body.yaw,
+    gazeRigLimits.body.yaw
+  )
+  const pitchFollow = splitHeadAndBody(
+    pitch.follow,
+    gazeRigLimits.neck.up,
+    gazeRigLimits.neck.down,
+    gazeRigLimits.body.up,
+    gazeRigLimits.body.down
+  )
+  const neckYaw = yawFollow.neck
+  const neckPitch = pitchFollow.neck
+  const bodyYaw = yawFollow.body
+  const bodyPitch = pitchFollow.body
   const visibleHeadYaw = neckYaw + bodyYaw
   const visibleHeadPitch = neckPitch + bodyPitch
-  const eyeYaw = clampDegrees(targetYaw - visibleHeadYaw, 18)
-  const eyePitch = clampDegrees(targetPitch - visibleHeadPitch, 13)
+  const eyeYaw = yaw.eye
+  const eyePitch = pitch.eye
   const roll = clampDegrees(-visibleHeadYaw * 0.08, 4)
   return {
     target: resolvedTarget,
     eyeOffset: {
-      x: (eyeYaw / 18) * 14,
-      y: (eyePitch / 13) * 9,
+      x: (eyeYaw / gazeRigLimits.eye.yaw) * 22,
+      y:
+        eyePitch < 0
+          ? (eyePitch / gazeRigLimits.eye.up) * 26
+          : (eyePitch / gazeRigLimits.eye.down) * 34,
     },
     headOffset: {
       x: visibleHeadPitch,

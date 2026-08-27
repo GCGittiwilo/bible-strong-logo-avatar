@@ -5,6 +5,7 @@ import {
   applyAmbientMotion,
   applyCoordinatedGaze,
   coordinatedGazeAt,
+  gazeRigLimits,
   gazeProfiles,
   hasAmbientMotion,
   solveGazeRig,
@@ -134,13 +135,43 @@ describe('perpetual expression motion', () => {
   it('resolves large looks through socket, neck, and forward-facing body limits', () => {
     const gaze = coordinatedGazeAt('scanning', 1700)
 
-    expect(Math.abs(gaze.eyeSocket.yaw)).toBeLessThanOrEqual(18)
-    expect(Math.abs(gaze.eyeSocket.pitch)).toBeLessThanOrEqual(13)
-    expect(Math.abs(gaze.neckOffset.yaw)).toBeLessThanOrEqual(36)
-    expect(Math.abs(gaze.neckOffset.pitch)).toBeLessThanOrEqual(24)
-    expect(Math.abs(gaze.bodyOffset.yaw)).toBeLessThanOrEqual(10)
-    expect(Math.abs(gaze.bodyOffset.pitch)).toBeLessThanOrEqual(6)
+    expect(Math.abs(gaze.eyeSocket.yaw)).toBeLessThanOrEqual(gazeRigLimits.eye.yaw)
+    expect(gaze.eyeSocket.pitch).toBeGreaterThanOrEqual(-gazeRigLimits.eye.up)
+    expect(gaze.eyeSocket.pitch).toBeLessThanOrEqual(gazeRigLimits.eye.down)
+    expect(Math.abs(gaze.neckOffset.yaw)).toBeLessThanOrEqual(gazeRigLimits.neck.yaw)
+    expect(gaze.neckOffset.pitch).toBeGreaterThanOrEqual(-gazeRigLimits.neck.up)
+    expect(gaze.neckOffset.pitch).toBeLessThanOrEqual(gazeRigLimits.neck.down)
+    expect(Math.abs(gaze.bodyOffset.yaw)).toBeLessThanOrEqual(gazeRigLimits.body.yaw)
+    expect(gaze.bodyOffset.pitch).toBeGreaterThanOrEqual(-gazeRigLimits.body.up)
+    expect(gaze.bodyOffset.pitch).toBeLessThanOrEqual(gazeRigLimits.body.down)
     expect(Math.sign(gaze.eyeSocket.yaw)).toBe(Math.sign(gaze.neckOffset.yaw))
+  })
+
+  it('starts the head before the eyes reach their socket limit', () => {
+    const comfortable = solveGazeRig({ x: 0.2, y: -0.2 })
+    const approachingEdge = solveGazeRig({ x: 0.42, y: -0.42 })
+
+    expect(comfortable.headOffset.y).toBeCloseTo(0)
+    expect(comfortable.headOffset.x).toBeCloseTo(0)
+    expect(Math.abs(approachingEdge.eyeSocket.yaw)).toBeLessThan(gazeRigLimits.eye.yaw)
+    expect(Math.abs(approachingEdge.eyeSocket.pitch)).toBeLessThan(gazeRigLimits.eye.up)
+    expect(Math.abs(approachingEdge.headOffset.y)).toBeGreaterThan(0)
+    expect(Math.abs(approachingEdge.headOffset.x)).toBeGreaterThan(0)
+  })
+
+  it('supports wider, asymmetric human-inspired vertical and side gaze', () => {
+    const up = solveGazeRig({ x: 0, y: -1 })
+    const down = solveGazeRig({ x: 0, y: 1 })
+    const side = solveGazeRig({ x: 1, y: 0 })
+
+    expect(up.eyeSocket.pitch).toBeCloseTo(-gazeRigLimits.eye.up)
+    expect(up.neckOffset.pitch).toBeCloseTo(-gazeRigLimits.neck.up)
+    expect(down.eyeSocket.pitch).toBeCloseTo(gazeRigLimits.eye.down)
+    expect(down.neckOffset.pitch).toBeCloseTo(gazeRigLimits.neck.down)
+    expect(side.eyeSocket.yaw).toBeCloseTo(gazeRigLimits.eye.yaw)
+    expect(side.neckOffset.yaw).toBeCloseTo(gazeRigLimits.neck.yaw)
+    expect(Math.abs(side.headOffset.y)).toBeGreaterThan(64)
+    expect(Math.abs(side.headOffset.y)).toBeLessThanOrEqual(72)
   })
 
   it('keeps every automated head direction linked to its current eye direction', () => {

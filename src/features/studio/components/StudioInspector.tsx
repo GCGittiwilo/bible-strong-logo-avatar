@@ -72,7 +72,7 @@ import {
   SurfaceThumbnail,
 } from '@/features/avatar/components/ExpressionWorkspace'
 import { defaultExpression } from '@/features/avatar/presets'
-import { solveGazeRig } from '@/features/avatar/ambientMotion'
+import { gazeRigLimits, solveGazeRig } from '@/features/avatar/ambientMotion'
 import { surfaceLabels, surfacePresets } from '@/features/avatar/surfaces'
 import { type SnapshotBackground } from '@/features/export/snapshotExporter'
 import { AvatarPage } from '@/features/studio/components/AvatarDrawer'
@@ -116,7 +116,7 @@ function GazeRigControl({
     <InspectorCard className="gaze-rig-card">
       <PanelTitle
         title="Live gaze rig"
-        subtitle="Drag the target. The eyes are authoritative; socket overflow drives the head, then the forward-facing body."
+        subtitle="Drag the target. Eyes lead each look; the head joins before the socket limit, then the forward-facing body adds the final degrees."
       />
       <div
         className="gaze-rig-pad"
@@ -149,7 +149,8 @@ function GazeRigControl({
         </span>
         <span>
           <small>Eye socket</small>
-          ±18° / ±13°
+          L/R ±{gazeRigLimits.eye.yaw}° · up {gazeRigLimits.eye.up}° · down {gazeRigLimits.eye.down}
+          °
         </span>
         <span>
           <small>Head</small>
