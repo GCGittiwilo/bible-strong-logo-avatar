@@ -155,4 +155,16 @@ describe('editable avatar sequences', () => {
     expect(sequence.gazeProfile).toBe('none')
     expect(resolveSequenceGazeProfile(sequence)).toBeNull()
   })
+
+  it('preserves interactive cursor drivers in saved animations', () => {
+    const [sequence] = parseSequences([
+      {
+        ...createInitialSequences()[0],
+        id: 'cursor-mode',
+        driver: 'autonomous',
+      },
+    ])
+
+    expect(sequence.driver).toBe('autonomous')
+  })
 })

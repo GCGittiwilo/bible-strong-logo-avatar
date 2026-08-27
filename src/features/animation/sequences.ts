@@ -8,6 +8,7 @@ import {
 } from '../avatar/presets'
 import type { Expression } from '../avatar/geometry'
 import { gazeProfiles, type GazeProfile } from '../avatar/ambientMotion'
+import { CURSOR_SEQUENCE_DRIVERS, type SequenceDriver } from './interactive'
 
 export type SequencePlaybackMode = 'loop' | 'once' | 'pingPong'
 export type SequenceTransition = 'spring' | 'smooth' | 'snappy' | 'linear'
@@ -49,6 +50,7 @@ export type AvatarSequence = {
   presentation?: SequencePresentation
   faceMode?: SequenceFaceMode
   gazeProfile?: SequenceGazeProfile
+  driver?: SequenceDriver
   effect?: SequenceEffect
   playbackMode: SequencePlaybackMode
   steps: SequenceStep[]
@@ -66,6 +68,7 @@ const transitions: SequenceTransition[] = ['spring', 'smooth', 'snappy', 'linear
 const presentations: SequencePresentation[] = ['face', 'logo']
 const faceModes: SequenceFaceMode[] = ['locked', 'attached']
 const sequenceGazeProfiles: SequenceGazeProfile[] = [...gazeProfiles, 'none']
+const sequenceDrivers = new Set<string>(CURSOR_SEQUENCE_DRIVERS)
 const effects: SequenceEffect[] = [
   'listening',
   'transcribing',
@@ -192,6 +195,11 @@ const parseSequence = (value: unknown, fallback: AvatarSequence): AvatarSequence
       ? { gazeProfile: candidate?.gazeProfile as SequenceGazeProfile }
       : fallback.gazeProfile
         ? { gazeProfile: fallback.gazeProfile }
+        : {}),
+    ...(sequenceDrivers.has(candidate?.driver ?? '')
+      ? { driver: candidate?.driver as SequenceDriver }
+      : fallback.driver
+        ? { driver: fallback.driver }
         : {}),
     ...(effects.includes(candidate?.effect as SequenceEffect)
       ? { effect: candidate?.effect as SequenceEffect }

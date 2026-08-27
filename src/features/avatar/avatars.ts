@@ -9,6 +9,7 @@ import {
   parseSequences,
   type AvatarSequence,
 } from '../animation/sequences'
+import { AUTONOMOUS_EXPRESSION_INDEXES } from '../animation/interactive'
 
 export type AvatarBehaviorLibrary = {
   expressions: Expression[]
@@ -521,6 +522,58 @@ const spinSequences = [
   }),
 ]
 
+const interactiveSequences = (expressions: Expression[]): AvatarSequence[] => {
+  const neutralExpressionId = expressions[0]?.id ?? defaultExpression.id
+  const autonomousExpressionIds = AUTONOMOUS_EXPRESSION_INDEXES.flatMap(index =>
+    expressions[index] ? [expressions[index].id] : []
+  )
+  const interactionSequence = (
+    id: string,
+    name: string,
+    description: string,
+    driver: NonNullable<AvatarSequence['driver']>,
+    expressionIds: string[]
+  ): AvatarSequence => ({
+    id,
+    name,
+    group: 'Animations',
+    description,
+    builtIn: true,
+    presentation: 'face',
+    faceMode: 'attached',
+    gazeProfile: 'none',
+    driver,
+    playbackMode: 'loop',
+    steps: (expressionIds.length ? expressionIds : [neutralExpressionId]).map(
+      (expressionId, index) => ({
+        id: `${id}-step-${index}`,
+        expressionId,
+        holdMs: 0,
+        transitionMs: 760,
+        transition: 'smooth',
+      })
+    ),
+    blink: { ...spinBlink, initialDelayMs: 1100 },
+  })
+
+  return [
+    interactionSequence(
+      'cursor-follow',
+      'Cursor Follow',
+      'The eyes lead toward the mouse, then the head and body follow within their natural limits.',
+      'cursor',
+      [neutralExpressionId]
+    ),
+    interactionSequence(
+      'cursor-follow-autonomous',
+      'Living Cursor Follow',
+      'Follows the cursor, changes only through the selected expression pool, and occasionally jumps, gets excited, or jolts in surprise.',
+      'autonomous',
+      autonomousExpressionIds
+    ),
+  ]
+}
+
 export const resolveAvatarBehavior = (
   avatar: StudioAvatar,
   base: AvatarBehaviorLibrary
@@ -529,6 +582,11 @@ export const resolveAvatarBehavior = (
   if (!avatar.spinAnimations) return source
   const builtInAnimationExpressions = [...spinExpressions, ...characterExpressions]
   const spinExpressionIds = new Set(builtInAnimationExpressions.map(expression => expression.id))
+  const mergedExpressions = [
+    ...source.expressions.filter(expression => !spinExpressionIds.has(expression.id)),
+    ...cloneExpressions(builtInAnimationExpressions),
+  ]
+  const builtInSequences = [...spinSequences, ...interactiveSequences(mergedExpressions)]
   const legacySpinSequenceIds = new Set(
     ['face-locked', 'face-attached'].flatMap(prefix =>
       ['horizontal-360', 'vertical-360', 'roll-360', 'diagonal-orbit', 'gyroscope'].map(
@@ -537,17 +595,14 @@ export const resolveAvatarBehavior = (
     )
   )
   const spinSequenceIds = new Set([
-    ...spinSequences.map(sequence => sequence.id),
+    ...builtInSequences.map(sequence => sequence.id),
     ...legacySpinSequenceIds,
   ])
   return {
-    expressions: [
-      ...source.expressions.filter(expression => !spinExpressionIds.has(expression.id)),
-      ...cloneExpressions(builtInAnimationExpressions),
-    ],
+    expressions: mergedExpressions,
     sequences: [
       ...source.sequences.filter(sequence => !spinSequenceIds.has(sequence.id)),
-      ...cloneSequences(spinSequences),
+      ...cloneSequences(builtInSequences),
     ],
   }
 }

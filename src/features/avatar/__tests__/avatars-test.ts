@@ -183,8 +183,8 @@ describe('avatar behavior revisions', () => {
     )
 
     expect(behavior.expressions).toHaveLength(base.expressions.length + 32)
-    expect(behavior.sequences).toHaveLength(base.sequences.length + 10)
-    expect(behavior.sequences.filter(sequence => sequence.group === 'Animations')).toHaveLength(9)
+    expect(behavior.sequences).toHaveLength(base.sequences.length + 12)
+    expect(behavior.sequences.filter(sequence => sequence.group === 'Animations')).toHaveLength(11)
     expect(
       behavior.sequences
         .filter(sequence => sequence.group === 'Animations')
@@ -193,7 +193,11 @@ describe('avatar behavior revisions', () => {
     expect(
       behavior.sequences
         .filter(sequence => sequence.group === 'Animations')
-        .every(sequence => sequence.gazeProfile === 'none' && sequence.playbackMode === 'once')
+        .every(
+          sequence =>
+            sequence.gazeProfile === 'none' &&
+            sequence.playbackMode === (sequence.driver ? 'loop' : 'once')
+        )
     ).toBe(true)
     expect(
       behavior.sequences
@@ -219,15 +223,26 @@ describe('avatar behavior revisions', () => {
     expect(
       behavior.expressions.find(expression => expression.id === 'character-shy-left')?.stageX
     ).toBe(-6)
-    expect(behavior.sequences.at(-1)).toMatchObject({
+    expect(behavior.sequences.find(sequence => sequence.id === 'cursor-follow')?.driver).toBe(
+      'cursor'
+    )
+    const autonomous = behavior.sequences.find(
+      sequence => sequence.id === 'cursor-follow-autonomous'
+    )
+    expect(autonomous?.driver).toBe('autonomous')
+    expect(autonomous?.steps.map(step => step.expressionId)).toEqual(
+      [11, 12, 13, 14, 16, 20, 52, 15, 3, 0, 9].map(index => behavior.expressions[index].id)
+    )
+    const loading = behavior.sequences.find(sequence => sequence.id === 'loading')
+    expect(loading).toMatchObject({
       id: 'loading',
       group: 'Loading',
       presentation: 'logo',
       faceMode: 'locked',
     })
-    expect(behavior.sequences.at(-1)?.steps).toHaveLength(8)
-    expect(behavior.sequences.at(-1)?.steps.every(step => step.transition === 'linear')).toBe(true)
-    expect(behavior.sequences.at(-1)?.steps.every(step => step.holdMs === 0)).toBe(true)
+    expect(loading?.steps).toHaveLength(8)
+    expect(loading?.steps.every(step => step.transition === 'linear')).toBe(true)
+    expect(loading?.steps.every(step => step.holdMs === 0)).toBe(true)
   })
 
   it('centers saved logo eyes when the bundled eye layout is upgraded', () => {

@@ -99,6 +99,10 @@ function mountAvatar(target, options = {}) {
   };
   let currentAnimation = options.animation && DATA.animations[options.animation] ? options.animation : animationNames[0];
   let manualGazeTarget = null;
+  let cursorFollowActive = false;
+  let cursorDesiredTarget = { x: 0, y: 0 };
+  let cursorRenderedTarget = { x: 0, y: 0 };
+  let cursorLastFrame = -1;
   const faceForwardForAnimation = () => Boolean(
     DATA.avatar.faceForward && !manualGazeTarget && DATA.animations[currentAnimation]?.faceMode !== 'attached'
   );
@@ -122,6 +126,11 @@ function mountAvatar(target, options = {}) {
   let frameRequest = null;
   let stepTimer = null;
   let blinkTimer = null;
+  let autonomousExpressionTimer = null;
+  let autonomousActionTimer = null;
+  let autonomousStepTimer = null;
+  let autonomousActionActive = false;
+  let autonomousExpressionId = null;
   let blinkDueAt = null;
   let stepIndex = 0;
   let direction = 1;
@@ -288,6 +297,16 @@ function mountAvatar(target, options = {}) {
   };
   const tick = time => {
     frameRequest = null;
+    if (cursorFollowActive) {
+      const elapsed = cursorLastFrame < 0 ? 16 : Math.min(time - cursorLastFrame, 50);
+      cursorLastFrame = time;
+      const blend = 1 - Math.exp(-elapsed / 72);
+      cursorRenderedTarget = {
+        x: cursorRenderedTarget.x + (cursorDesiredTarget.x - cursorRenderedTarget.x) * blend,
+        y: cursorRenderedTarget.y + (cursorDesiredTarget.y - cursorRenderedTarget.y) * blend,
+      };
+      manualGazeTarget = cursorRenderedTarget;
+    }
     if (faceTransition) {
       const linear = clamp01((time - faceTransition.startedAt) / faceTransition.durationMs);
       const eased = linear * linear * (3 - 2 * linear);
@@ -339,11 +358,21 @@ function mountAvatar(target, options = {}) {
     // requestAnimationFrame already synchronizes this loop to the display. Do
     // not halve a 60 Hz display to 30 FPS by throttling continuous motion here.
     render(time);
-    if (faceTransition || transitionState || blinkState || ambientActive || gazeActive || talking || thinking) frameRequest = requestAnimationFrame(tick);
+    if (faceTransition || transitionState || blinkState || ambientActive || gazeActive || talking || thinking || cursorFollowActive) frameRequest = requestAnimationFrame(tick);
   };
   const requestTick = () => {
     if (frameRequest === null) frameRequest = requestAnimationFrame(tick);
   };
+  const followPointer = event => {
+    if (!cursorFollowActive || event.pointerType === 'touch') return;
+    const bounds = svg.getBoundingClientRect();
+    cursorDesiredTarget = {
+      x: Math.max(-1, Math.min(1, (event.clientX - (bounds.left + bounds.width / 2)) / Math.max(bounds.width * 0.48, 1))),
+      y: Math.max(-1, Math.min(1, (event.clientY - (bounds.top + bounds.height / 2)) / Math.max(bounds.height * 0.48, 1))),
+    };
+    requestTick();
+  };
+  globalThis.addEventListener('pointermove', followPointer, { passive: true });
   const animateTo = (expressionId, durationMs, transition) => {
     const target = DATA.expressions[expressionId];
     if (!target) return;
@@ -376,8 +405,15 @@ function mountAvatar(target, options = {}) {
   const clearSchedule = () => {
     if (stepTimer !== null) clearTimeout(stepTimer);
     if (blinkTimer !== null) clearTimeout(blinkTimer);
+    if (autonomousExpressionTimer !== null) clearTimeout(autonomousExpressionTimer);
+    if (autonomousActionTimer !== null) clearTimeout(autonomousActionTimer);
+    if (autonomousStepTimer !== null) clearTimeout(autonomousStepTimer);
     stepTimer = null;
     blinkTimer = null;
+    autonomousExpressionTimer = null;
+    autonomousActionTimer = null;
+    autonomousStepTimer = null;
+    autonomousActionActive = false;
     blinkDueAt = null;
     stepDueAt = null;
   };
@@ -417,6 +453,67 @@ function mountAvatar(target, options = {}) {
     stepDueAt = performance.now() + duration;
     stepTimer = setTimeout(() => advance(animation), duration);
   };
+  const startAutonomous = animation => {
+    const expressionSteps = animation.steps.filter(step => DATA.expressions[step.expressionId]);
+    if (!expressionSteps.length) return;
+    const stillActive = () => playing && DATA.animations[currentAnimation]?.driver === 'autonomous';
+    const randomBetween = (minimum, maximum) => minimum + (maximum - minimum) * Math.random();
+    const pickDifferent = (values, previous) => {
+      const choices = values.length > 1 ? values.filter(value => value !== previous) : values;
+      return choices[Math.min(Math.floor(Math.random() * choices.length), choices.length - 1)];
+    };
+    const scheduleExpression = (delay = randomBetween(1700, 3300)) => {
+      autonomousExpressionTimer = setTimeout(() => {
+        if (!stillActive()) return;
+        if (autonomousActionActive) {
+          scheduleExpression(650);
+          return;
+        }
+        const step = pickDifferent(expressionSteps, expressionSteps.find(item => item.expressionId === autonomousExpressionId));
+        autonomousExpressionId = step.expressionId;
+        animateTo(step.expressionId, Math.round(randomBetween(620, 980)), 'smooth');
+        scheduleExpression();
+      }, delay);
+    };
+    const scheduleAction = (delay = randomBetween(5200, 9200)) => {
+      autonomousActionTimer = setTimeout(() => {
+        if (!stillActive()) return;
+        const actions = ['character-jumping', 'character-excited-bounce', 'character-surprised-jolt']
+          .map(id => DATA.animations[id])
+          .filter(Boolean);
+        const action = actions[Math.floor(Math.random() * actions.length)];
+        if (!action) {
+          scheduleAction();
+          return;
+        }
+        autonomousActionActive = true;
+        const actionSteps = action.steps.slice(1, -1);
+        let position = 0;
+        const playActionStep = () => {
+          if (!stillActive()) return;
+          const step = actionSteps[position++];
+          if (!step) {
+            const resting = expressionSteps.find(item => item.expressionId === autonomousExpressionId) || expressionSteps[0];
+            animateTo(resting.expressionId, 720, 'smooth');
+            autonomousStepTimer = setTimeout(() => {
+              if (!stillActive()) return;
+              autonomousActionActive = false;
+              scheduleAction();
+            }, 720);
+            return;
+          }
+          animateTo(step.expressionId, step.transitionMs, step.transition);
+          autonomousStepTimer = setTimeout(playActionStep, step.transitionMs + step.holdMs);
+        };
+        playActionStep();
+      }, delay);
+    };
+    const initial = expressionSteps[Math.floor(Math.random() * expressionSteps.length)];
+    autonomousExpressionId = initial.expressionId;
+    animateTo(initial.expressionId, 760, 'smooth');
+    scheduleExpression();
+    scheduleAction();
+  };
   const api = {
     element: svg,
     get animation() { return currentAnimation; },
@@ -428,10 +525,26 @@ function mountAvatar(target, options = {}) {
       clearSchedule();
       if (animationName === currentAnimation && paused) {
         const resumedAt = performance.now();
+        const resumedAnimation = DATA.animations[currentAnimation];
         if (gazePausedAt !== null) gazeStartedAt += resumedAt - gazePausedAt;
         gazePausedAt = null;
         paused = false;
         playing = true;
+        if (resumedAnimation.driver) {
+          cursorFollowActive = true;
+          manualGazeTarget = cursorRenderedTarget;
+          if (resumedAnimation.driver === 'autonomous') startAutonomous(resumedAnimation);
+          scheduleBlink(
+            resumedAnimation,
+            pausedBlinkDelay || resumedAnimation.blink.minIntervalMs
+          );
+          pausedTransition = null;
+          pausedBlink = null;
+          pausedBlinkDelay = 0;
+          syncFaceClip();
+          requestTick();
+          return api;
+        }
         if (pausedTransition) animateTo(pausedTransition.expressionId, pausedTransition.durationMs, pausedTransition.transition);
         if (pausedBlink) {
           blinkState = {
@@ -467,6 +580,16 @@ function mountAvatar(target, options = {}) {
       syncFaceClip();
       gazePausedAt = null;
       const animation = DATA.animations[currentAnimation];
+      cursorFollowActive = Boolean(animation.driver);
+      cursorLastFrame = -1;
+      if (cursorFollowActive) {
+        cursorDesiredTarget = { x: 0, y: 0 };
+        cursorRenderedTarget = { x: 0, y: 0 };
+        manualGazeTarget = cursorRenderedTarget;
+      } else {
+        manualGazeTarget = null;
+      }
+      syncFaceClip();
       if (animation.presentation === 'logo') api.setFace(false);
       else if (animation.presentation === 'face') api.setFace(true);
       api.setThinking(animation.effect === 'thinking');
@@ -474,6 +597,19 @@ function mountAvatar(target, options = {}) {
       direction = 1;
       paused = false;
       playing = true;
+      if (animation.driver === 'cursor') {
+        const first = animation.steps[0];
+        if (first) animateTo(first.expressionId, first.transitionMs, first.transition);
+        scheduleBlink(animation, animation.blink.initialDelayMs);
+        requestTick();
+        return api;
+      }
+      if (animation.driver === 'autonomous') {
+        startAutonomous(animation);
+        scheduleBlink(animation, animation.blink.initialDelayMs);
+        requestTick();
+        return api;
+      }
       runStep(animation);
       scheduleBlink(animation, animation.blink.initialDelayMs);
       return api;
@@ -500,6 +636,8 @@ function mountAvatar(target, options = {}) {
       clearSchedule();
       transitionState = null;
       blinkState = null;
+      cursorFollowActive = false;
+      manualGazeTarget = null;
       paused = true;
       playing = false;
       liveGaze = false;
@@ -516,6 +654,8 @@ function mountAvatar(target, options = {}) {
       paused = false;
       playing = false;
       liveGaze = false;
+      cursorFollowActive = false;
+      manualGazeTarget = null;
       activeGazeProfile = null;
       lastRenderedGaze = null;
       gazeBlendFrom = null;
@@ -589,6 +729,7 @@ function mountAvatar(target, options = {}) {
     destroy() {
       clearSchedule();
       if (frameRequest !== null) cancelAnimationFrame(frameRequest);
+      globalThis.removeEventListener('pointermove', followPointer);
       svg.remove();
     },
   };

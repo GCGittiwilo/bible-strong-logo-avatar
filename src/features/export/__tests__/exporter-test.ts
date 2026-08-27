@@ -66,6 +66,21 @@ describe('avatar export', () => {
     expect(generateJavaScriptAvatarModule(attached)).toContain("faceMode !== 'attached'")
   })
 
+  it('exports cursor and autonomous animation drivers', () => {
+    const cursorAnimation = {
+      ...animations[0],
+      id: 'cursor-follow',
+      driver: 'cursor' as const,
+    }
+    const cursorPayload = createAvatarExportPayload(avatar, initialExpressions, [cursorAnimation])
+    const source = generateJavaScriptAvatarModule(cursorPayload)
+
+    expect(cursorPayload.animations['cursor-follow'].driver).toBe('cursor')
+    expect(source).toContain("addEventListener('pointermove', followPointer")
+    expect(source).toContain("driver === 'autonomous'")
+    expect(source).toContain('startAutonomous')
+  })
+
   it('generates a standalone JavaScript module without a Web Component', () => {
     const source = generateJavaScriptAvatarModule(payload)
 

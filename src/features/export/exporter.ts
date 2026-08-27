@@ -17,6 +17,7 @@ export type AvatarExportAnimation = Pick<
   | 'effect'
   | 'faceMode'
   | 'gazeProfile'
+  | 'driver'
 > & {
   steps: Pick<
     AvatarSequence['steps'][number],
@@ -87,6 +88,7 @@ export const createAvatarExportPayload = (
           description: animation.description,
           ...(animation.presentation ? { presentation: animation.presentation } : {}),
           ...(animation.faceMode ? { faceMode: animation.faceMode } : {}),
+          ...(animation.driver ? { driver: animation.driver } : {}),
           ...(gazeProfile ? { gazeProfile } : {}),
           ...(animation.effect ? { effect: animation.effect } : {}),
           playbackMode: animation.playbackMode,

@@ -1,6 +1,6 @@
 import { AudioLines, BrainCircuit, Camera, Frame, Info, ScanFace } from 'lucide-react'
 import { motion } from 'motion/react'
-import { type CSSProperties, useState } from 'react'
+import { type CSSProperties, useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -11,6 +11,7 @@ import type { StudioController } from '@/features/studio/useStudioController'
 
 export function StudioStage({ controller }: { controller: StudioController }) {
   const [photoHelpOpen, setPhotoHelpOpen] = useState(false)
+  const stageRef = useRef<HTMLElement>(null)
   const {
     activeAvatarEyes,
     activeAvatar,
@@ -20,6 +21,7 @@ export function StudioStage({ controller }: { controller: StudioController }) {
     bodyEditing,
     canvasExpression,
     commitBodyNode,
+    cursorFollowActive,
     editing,
     expression,
     faceReveal,
@@ -42,6 +44,7 @@ export function StudioStage({ controller }: { controller: StudioController }) {
     selectedBodyNodeId,
     selectedEyeSide,
     setEditing,
+    setCursorGazeTarget,
     setSelectedEyeSide,
     showWire,
     surface,
@@ -56,9 +59,25 @@ export function StudioStage({ controller }: { controller: StudioController }) {
     updateHighlight,
     updateImmediate,
   } = controller
+  useEffect(() => {
+    if (!cursorFollowActive) return
+    const followPointer = (event: PointerEvent) => {
+      if (event.pointerType === 'touch') return
+      const bounds = stageRef.current?.getBoundingClientRect()
+      if (!bounds) return
+      setCursorGazeTarget({
+        x: (event.clientX - (bounds.left + bounds.width / 2)) / (bounds.width * 0.48),
+        y: (event.clientY - (bounds.top + bounds.height / 2)) / (bounds.height * 0.48),
+      })
+    }
+    window.addEventListener('pointermove', followPointer, { passive: true })
+    return () => window.removeEventListener('pointermove', followPointer)
+  }, [cursorFollowActive, setCursorGazeTarget])
   return (
     <motion.section
+      ref={stageRef}
       className="stage-column"
+      data-cursor-follow={cursorFollowActive || undefined}
       data-logo-avatar={activeAvatar.logoMorph ? '' : undefined}
       style={
         {

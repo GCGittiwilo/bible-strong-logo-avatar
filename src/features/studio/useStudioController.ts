@@ -30,6 +30,11 @@ import {
   stopPlaybackTimeline,
 } from '@/features/animation/playback'
 import {
+  AUTONOMOUS_ACTION_IDS,
+  pickDifferent,
+  randomBetween,
+} from '@/features/animation/interactive'
+import {
   createSequence,
   duplicateSequence,
   findExpressionIndex,
@@ -174,6 +179,12 @@ export function useStudioController() {
     y: number
   } | null>(null)
   const manualGazeTargetRef = useRef(manualGazeTarget)
+  const [cursorFollowActive, setCursorFollowActive] = useState(false)
+  const cursorFollowActiveRef = useRef(false)
+  const cursorDesiredTarget = useRef({ x: 0, y: 0 })
+  const cursorRenderedTarget = useRef({ x: 0, y: 0 })
+  const cursorLastFrame = useRef(-1)
+  const cursorFollowFrame = useRef<number | null>(null)
   const faceReveal = useMotionValue(initialAvatar.logoMorph ? 0 : 1)
   const faceRevealAnimation = useRef<ReturnType<typeof animate> | null>(null)
   const initialStatePlayback = initialDocument.playback
@@ -249,6 +260,11 @@ export function useStudioController() {
   } | null>(null)
   const [selectedSequenceStepId, setSelectedSequenceStepId] = useState<string | null>(null)
   const stateTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autonomousExpressionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autonomousActionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autonomousActionStepTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autonomousActionActive = useRef(false)
+  const autonomousExpressionId = useRef<string | null>(null)
   const activeSequenceRef = useRef<AvatarSequence | null>(null)
   const activeGazeProfileRef = useRef<GazeProfile | null>(null)
   const editorStateSnapshot = useRef<{
@@ -433,6 +449,21 @@ export function useStudioController() {
       lastBodyAmbientElapsed.current = frameTimeMs - bodyAmbientStartedAt.current
     }
     const gazeProfile = activeGazeProfileRef.current
+    if (cursorFollowActiveRef.current && frameTimeMs !== undefined) {
+      const elapsed =
+        cursorLastFrame.current < 0 ? 16 : Math.min(frameTimeMs - cursorLastFrame.current, 50)
+      cursorLastFrame.current = frameTimeMs
+      const blend = 1 - Math.exp(-elapsed / 72)
+      cursorRenderedTarget.current = {
+        x:
+          cursorRenderedTarget.current.x +
+          (cursorDesiredTarget.current.x - cursorRenderedTarget.current.x) * blend,
+        y:
+          cursorRenderedTarget.current.y +
+          (cursorDesiredTarget.current.y - cursorRenderedTarget.current.y) * blend,
+      }
+      manualGazeTargetRef.current = cursorRenderedTarget.current
+    }
     const gazeTarget = manualGazeTargetRef.current
     if (gazeProfile && frameTimeMs !== undefined) {
       if (gazeStartedAt.current < 0) gazeStartedAt.current = frameTimeMs - lastGazeElapsed.current
@@ -548,6 +579,44 @@ export function useStudioController() {
     )
     paintPose(displayedPose.current, undefined, performance.now())
   }
+  const setCursorGazeTarget = (target: { x: number; y: number }) => {
+    cursorDesiredTarget.current = {
+      x: Math.max(-1, Math.min(1, target.x)),
+      y: Math.max(-1, Math.min(1, target.y)),
+    }
+  }
+  const updateCursorFollowEnabled = (next: boolean) => {
+    cursorFollowActiveRef.current = next
+    setCursorFollowActive(next)
+    cursorLastFrame.current = -1
+    if (next) {
+      cursorDesiredTarget.current = { x: 0, y: 0 }
+      cursorRenderedTarget.current = { x: 0, y: 0 }
+      manualGazeTargetRef.current = cursorRenderedTarget.current
+      setManualGazeTargetState(null)
+      updateActiveFaceForward(false)
+      return
+    }
+    manualGazeTargetRef.current = null
+    cursorDesiredTarget.current = { x: 0, y: 0 }
+    cursorRenderedTarget.current = { x: 0, y: 0 }
+  }
+  useEffect(() => {
+    if (!cursorFollowActive || reduceMotion) return
+    const tick = (time: number) => {
+      const deltaX = cursorDesiredTarget.current.x - cursorRenderedTarget.current.x
+      const deltaY = cursorDesiredTarget.current.y - cursorRenderedTarget.current.y
+      if (transitionFrame.current === null && Math.hypot(deltaX, deltaY) > 0.0001) {
+        paintPose(displayedPose.current, undefined, time)
+      }
+      cursorFollowFrame.current = requestAnimationFrame(tick)
+    }
+    cursorFollowFrame.current = requestAnimationFrame(tick)
+    return () => {
+      if (cursorFollowFrame.current !== null) cancelAnimationFrame(cursorFollowFrame.current)
+      cursorFollowFrame.current = null
+    }
+  }, [cursorFollowActive, reduceMotion])
   useMotionValueEvent(faceReveal, 'change', latest => {
     const avatar = avatarsRef.current.find(item => item.id === activeAvatarIdRef.current)
     paintRenderedLogoMorph(renderedScene, avatar?.logoMorph, latest)
@@ -610,6 +679,7 @@ export function useStudioController() {
     () => () => {
       if (transitionFrame.current !== null) cancelAnimationFrame(transitionFrame.current)
       if (talkingFrame.current !== null) cancelAnimationFrame(talkingFrame.current)
+      if (cursorFollowFrame.current !== null) cancelAnimationFrame(cursorFollowFrame.current)
       blinkControls.current?.stop()
       bodyColorAnimation.current?.stop()
       eyeColorAnimation.current?.stop()
@@ -1200,8 +1270,15 @@ export function useStudioController() {
   const clearStateTimers = () => {
     if (stateTimer.current) clearTimeout(stateTimer.current)
     if (blinkTimer.current) clearTimeout(blinkTimer.current)
+    if (autonomousExpressionTimer.current) clearTimeout(autonomousExpressionTimer.current)
+    if (autonomousActionTimer.current) clearTimeout(autonomousActionTimer.current)
+    if (autonomousActionStepTimer.current) clearTimeout(autonomousActionStepTimer.current)
     stateTimer.current = null
     blinkTimer.current = null
+    autonomousExpressionTimer.current = null
+    autonomousActionTimer.current = null
+    autonomousActionStepTimer.current = null
+    autonomousActionActive.current = false
     playbackTimeline.current = {
       ...playbackTimeline.current,
       stepDueAt: null,
@@ -1219,6 +1296,7 @@ export function useStudioController() {
     }
     if (blinkAnimating.current) blinkControls.current?.pause()
     clearStateTimers()
+    if (activeSequenceRef.current?.driver) updateCursorFollowEnabled(false)
     setStatePlaying(false)
     setPlaybackStatus('paused')
     if (persist && activeState) persistStatePlayback({ stateId: activeState, playing: false })
@@ -1226,6 +1304,7 @@ export function useStudioController() {
 
   const stopState = (persist = true) => {
     clearStateTimers()
+    updateCursorFollowEnabled(false)
     playbackTimeline.current = stopPlaybackTimeline(playbackTimeline.current)
     activeSequenceTransition.current = null
     pausedSequenceTransition.current = null
@@ -1246,6 +1325,99 @@ export function useStudioController() {
     setPlaybackStatus('stopped')
     setPlaybackVisual(current => ({ ...current, position: null }))
     if (persist) persistStatePlayback({ stateId: null, playing: false })
+  }
+
+  const startAutonomousPlayback = (sequence: AvatarSequence) => {
+    const isActive = () =>
+      activeSequenceRef.current?.id === sequence.id && cursorFollowActiveRef.current
+    const expressionPool = sequence.steps.flatMap(step => {
+      const index = findExpressionIndex(expressionsRef.current, step.expressionId)
+      return index >= 0 ? [{ expression: expressionsRef.current[index], index }] : []
+    })
+    if (!expressionPool.length) return
+
+    const scheduleExpression = (delay = randomBetween(1700, 3300)) => {
+      autonomousExpressionTimer.current = setTimeout(() => {
+        if (!isActive()) return
+        if (autonomousActionActive.current) {
+          scheduleExpression(650)
+          return
+        }
+        const previous = autonomousExpressionId.current
+        const next = pickDifferent(
+          expressionPool.map(item => item.expression.id),
+          previous
+        )
+        const selected =
+          expressionPool.find(item => item.expression.id === next) ?? expressionPool[0]
+        autonomousExpressionId.current = selected.expression.id
+        transitionToExpression(selected.expression, selected.index, {
+          transitionMs: Math.round(randomBetween(620, 980)),
+          transition: 'smooth',
+        })
+        scheduleExpression()
+      }, delay)
+    }
+
+    const scheduleAction = (delay = randomBetween(5200, 9200)) => {
+      autonomousActionTimer.current = setTimeout(() => {
+        if (!isActive()) return
+        const availableActions = AUTONOMOUS_ACTION_IDS.flatMap(id => {
+          const action = sequencesRef.current.find(item => item.id === id)
+          return action ? [action] : []
+        })
+        const action = pickDifferent(availableActions, null)
+        if (!action) {
+          scheduleAction()
+          return
+        }
+        autonomousActionActive.current = true
+        const actionSteps = action.steps.slice(1, -1)
+        let actionPosition = 0
+        const playActionStep = () => {
+          if (!isActive()) return
+          const step = actionSteps[actionPosition]
+          if (!step) {
+            const resting =
+              expressionPool.find(item => item.expression.id === autonomousExpressionId.current) ??
+              expressionPool[0]
+            transitionToExpression(resting.expression, resting.index, {
+              transitionMs: 720,
+              transition: 'smooth',
+            })
+            autonomousActionStepTimer.current = setTimeout(() => {
+              if (!isActive()) return
+              autonomousActionActive.current = false
+              scheduleAction()
+            }, 720)
+            return
+          }
+          const expressionIndex = findExpressionIndex(expressionsRef.current, step.expressionId)
+          const expression = expressionsRef.current[expressionIndex]
+          if (expression) transitionToExpression(expression, expressionIndex, step)
+          actionPosition += 1
+          autonomousActionStepTimer.current = setTimeout(
+            playActionStep,
+            step.transitionMs + step.holdMs
+          )
+        }
+        playActionStep()
+      }, delay)
+    }
+
+    const initial = pickDifferent(
+      expressionPool.map(item => item.expression.id),
+      null
+    )
+    const initialSelection =
+      expressionPool.find(item => item.expression.id === initial) ?? expressionPool[0]
+    autonomousExpressionId.current = initialSelection.expression.id
+    transitionToExpression(initialSelection.expression, initialSelection.index, {
+      transitionMs: 760,
+      transition: 'smooth',
+    })
+    scheduleExpression()
+    scheduleAction()
   }
 
   const launchSequence = (sequence: AvatarSequence, resume = false, persist = true) => {
@@ -1275,6 +1447,7 @@ export function useStudioController() {
     if (playbackAvatar.logoMorph) setLogoFace(sequence.presentation !== 'logo')
     updateActiveFaceForward(resolveSequenceFaceForward(playbackAvatar.faceForward, sequence))
     activeSequenceRef.current = sequence
+    updateCursorFollowEnabled(Boolean(sequence.driver))
     paintPose(displayedPose.current, undefined, performance.now())
     const id = sequence.id
     playbackTimeline.current = beginPlayback(playbackTimeline.current, resume)
@@ -1356,6 +1529,21 @@ export function useStudioController() {
       scheduleBlink(
         sequence.blink.durationMs + minIntervalMs + Math.random() * (maxIntervalMs - minIntervalMs)
       )
+    }
+    if (sequence.driver) {
+      setPlaybackVisual(current => ({ position: 0, run: current.run + 1, durationMs: 0 }))
+      if (sequence.driver === 'cursor') {
+        const firstStep = sequence.steps[0]
+        const expressionIndex = firstStep
+          ? findExpressionIndex(expressionsRef.current, firstStep.expressionId)
+          : -1
+        const preset = expressionsRef.current[expressionIndex]
+        if (preset && firstStep) transitionToExpression(preset, expressionIndex, firstStep)
+      } else {
+        startAutonomousPlayback(sequence)
+      }
+      if (sequence.blink.enabled) scheduleBlink(sequence.blink.initialDelayMs)
+      return
     }
     if (resume) {
       const pausedTransition = pausedSequenceTransition.current
@@ -2019,6 +2207,7 @@ export function useStudioController() {
     commitStateMove,
     confirmStudioProjectImport,
     createNewAvatar,
+    cursorFollowActive,
     deleteActiveAvatar,
     deleteAvatarOpen,
     deleteEditing,
@@ -2095,6 +2284,7 @@ export function useStudioController() {
     setDeleteAvatarOpen,
     setDeleteExpressionOpen,
     setDeleteSequenceOpen,
+    setCursorGazeTarget,
     setDraggingAvatarId,
     setDraggingExpressionId,
     setDraggingStateId,

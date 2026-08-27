@@ -102,10 +102,10 @@ const createBundledStudioDocument = () => {
   const snapshot = JSON.parse(JSON.stringify(defaultStudioDocument)) as StudioDocument
   const logo = snapshot.library.avatars.find(avatar => avatar.id === 'avatar-bible-strong-logo')
   if (logo) {
-    logo.behaviorRevision = 4
+    logo.behaviorRevision = 5
     snapshot.library = {
       activeAvatarId: logo.id,
-      bundledAvatarRevision: 4,
+      bundledAvatarRevision: 5,
       avatars: [logo],
     }
   }
