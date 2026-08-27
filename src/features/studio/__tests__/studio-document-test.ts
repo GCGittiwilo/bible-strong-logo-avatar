@@ -43,8 +43,19 @@ describe('Studio document', () => {
 
     expect(loaded.library.avatars).toHaveLength(1)
     expect(loaded.library.avatars[0].id).toBe('avatar-bible-strong-logo')
-    expect(loaded.library.bundledAvatarRevision).toBe(2)
+    expect(loaded.library.bundledAvatarRevision).toBe(4)
     expect(loaded.library.activeAvatarId).toBe('avatar-bible-strong-logo')
+    expect(loaded.sequences.every(sequence => sequence.faceMode === 'attached')).toBe(true)
+    expect(
+      loaded.expressions.every(
+        expression =>
+          expression.headX === 0 &&
+          expression.headY === 0 &&
+          expression.headZ === 0 &&
+          expression.positionXLeft === 0 &&
+          expression.positionXRight === 0
+      )
+    ).toBe(true)
   })
 
   it('persists one coherent document after a mutation', () => {

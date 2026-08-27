@@ -221,7 +221,7 @@ const spinSequence = (
   id: string,
   name: string,
   expressionIds: string[],
-  group: 'Face Locked Spins' | 'Face Attached Spins' | 'Loading',
+  group: 'Animations' | 'Loading',
   faceMode: AvatarSequence['faceMode'],
   options: {
     presentation?: AvatarSequence['presentation']
@@ -233,16 +233,14 @@ const spinSequence = (
   name,
   group,
   description:
-    group === 'Face Attached Spins'
-      ? 'The eyes rotate with the logo frame as one connected character.'
-      : group === 'Face Locked Spins'
-        ? 'The logo frame spins independently while the eyes keep facing the user.'
-        : 'The intact Bible Strong logo spins while the chatbot is loading.',
+    group === 'Animations'
+      ? 'A connected head-and-eye movement that returns smoothly to the live gaze pose.'
+      : 'The intact Bible Strong logo spins while the chatbot is loading.',
   builtIn: true,
   presentation: options.presentation ?? 'face',
   faceMode,
-  ...(group === 'Loading' ? {} : { gazeProfile: 'orbit' as const }),
-  playbackMode: 'loop',
+  ...(group === 'Loading' ? {} : { gazeProfile: 'animation' as const }),
+  playbackMode: group === 'Animations' ? 'once' : 'loop',
   steps: expressionIds.map((expressionId, index) => ({
     id: `${id}-step-${index}`,
     expressionId,
@@ -256,6 +254,7 @@ const spinSequence = (
 const axisSequence = (axis: 'x' | 'y' | 'z') => [
   'logo-spin-rest',
   ...[90, 180, 270].map(angle => `logo-spin-${axis}-${angle}`),
+  'logo-spin-rest',
 ]
 const diagonalSequence = [
   'logo-spin-rest',
@@ -263,6 +262,7 @@ const diagonalSequence = [
   'logo-spin-diagonal-2',
   'logo-spin-diagonal-3',
   'logo-spin-diagonal-4',
+  'logo-spin-rest',
 ]
 const gyroscopeSequence = [
   'logo-spin-rest',
@@ -270,34 +270,44 @@ const gyroscopeSequence = [
   'logo-spin-gyro-2',
   'logo-spin-gyro-3',
   'logo-spin-gyro-4',
+  'logo-spin-rest',
 ]
 
-const spinFamily = (
-  prefix: 'face-locked' | 'face-attached',
-  group: 'Face Locked Spins' | 'Face Attached Spins',
-  faceMode: NonNullable<AvatarSequence['faceMode']>
-) => [
-  spinSequence(`${prefix}-horizontal-360`, 'Horizontal 360', axisSequence('y'), group, faceMode, {
+const spinFamily = () => [
+  spinSequence(
+    'head-horizontal-360',
+    'Horizontal 360',
+    axisSequence('y'),
+    'Animations',
+    'attached',
+    {
+      transitionMs: 360,
+    }
+  ),
+  spinSequence('head-vertical-360', 'Vertical 360', axisSequence('x'), 'Animations', 'attached', {
     transitionMs: 360,
   }),
-  spinSequence(`${prefix}-vertical-360`, 'Vertical 360', axisSequence('x'), group, faceMode, {
-    transitionMs: 360,
-  }),
-  spinSequence(`${prefix}-roll-360`, 'Roll 360', axisSequence('z'), group, faceMode, {
+  spinSequence('head-roll-360', 'Roll 360', axisSequence('z'), 'Animations', 'attached', {
     transitionMs: 340,
   }),
-  spinSequence(`${prefix}-diagonal-orbit`, 'Diagonal Orbit', diagonalSequence, group, faceMode, {
-    transitionMs: 390,
-  }),
-  spinSequence(`${prefix}-gyroscope`, 'Gyroscope', gyroscopeSequence, group, faceMode, {
+  spinSequence(
+    'head-diagonal-orbit',
+    'Diagonal Orbit',
+    diagonalSequence,
+    'Animations',
+    'attached',
+    {
+      transitionMs: 390,
+    }
+  ),
+  spinSequence('head-gyroscope', 'Gyroscope', gyroscopeSequence, 'Animations', 'attached', {
     transitionMs: 320,
     transition: 'snappy',
   }),
 ]
 
 const spinSequences = [
-  ...spinFamily('face-locked', 'Face Locked Spins', 'locked'),
-  ...spinFamily('face-attached', 'Face Attached Spins', 'attached'),
+  ...spinFamily(),
   spinSequence('loading', 'loading', axisSequence('y'), 'Loading', 'locked', {
     presentation: 'logo',
     transitionMs: 360,
@@ -311,7 +321,17 @@ export const resolveAvatarBehavior = (
   const source = avatar.behavior ?? base
   if (!avatar.spinAnimations) return source
   const spinExpressionIds = new Set(spinExpressions.map(expression => expression.id))
-  const spinSequenceIds = new Set(spinSequences.map(sequence => sequence.id))
+  const legacySpinSequenceIds = new Set(
+    ['face-locked', 'face-attached'].flatMap(prefix =>
+      ['horizontal-360', 'vertical-360', 'roll-360', 'diagonal-orbit', 'gyroscope'].map(
+        suffix => `${prefix}-${suffix}`
+      )
+    )
+  )
+  const spinSequenceIds = new Set([
+    ...spinSequences.map(sequence => sequence.id),
+    ...legacySpinSequenceIds,
+  ])
   return {
     expressions: [
       ...source.expressions.filter(expression => !spinExpressionIds.has(expression.id)),

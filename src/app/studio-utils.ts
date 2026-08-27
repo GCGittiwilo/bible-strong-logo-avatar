@@ -13,7 +13,7 @@ import { applyCoordinatedGaze, type CoordinatedGaze } from '@/features/avatar/am
 import { poseFromExpression, renderAvatar, type Expression } from '@/features/avatar/geometry'
 import { type SurfaceConfig } from '@/features/avatar/surfaces'
 
-export type Mode = 'avatars' | 'manual' | 'expressions' | 'states' | 'export'
+export type Mode = 'avatars' | 'manual' | 'expressions' | 'movements' | 'states' | 'export'
 export type ExportFormat = 'react' | 'javascript'
 export type SnapshotFormat = 'svg' | 'png'
 export type PlaybackStatus = 'playing' | 'paused' | 'stopped'

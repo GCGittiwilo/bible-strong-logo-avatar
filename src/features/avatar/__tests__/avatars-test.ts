@@ -176,34 +176,24 @@ describe('avatar behavior revisions', () => {
     expect(result.avatars[0].mouthRevision).toBe(1)
   })
 
-  it('adds paired face-locked and face-attached spin libraries plus logo loading', () => {
+  it('adds connected head animations plus logo loading', () => {
     const behavior = resolveAvatarBehavior(
       { ...createAvatar('Bible Strong Spins'), spinAnimations: true, faceForward: true },
       base
     )
 
     expect(behavior.expressions).toHaveLength(base.expressions.length + 18)
-    expect(behavior.sequences).toHaveLength(base.sequences.length + 11)
-    expect(
-      behavior.sequences.filter(sequence => sequence.group === 'Face Locked Spins')
-    ).toHaveLength(5)
-    expect(
-      behavior.sequences.filter(sequence => sequence.group === 'Face Attached Spins')
-    ).toHaveLength(5)
+    expect(behavior.sequences).toHaveLength(base.sequences.length + 6)
+    expect(behavior.sequences.filter(sequence => sequence.group === 'Animations')).toHaveLength(5)
     expect(
       behavior.sequences
-        .filter(sequence => sequence.group === 'Face Locked Spins')
-        .every(sequence => sequence.faceMode === 'locked')
-    ).toBe(true)
-    expect(
-      behavior.sequences
-        .filter(sequence => sequence.group === 'Face Attached Spins')
+        .filter(sequence => sequence.group === 'Animations')
         .every(sequence => sequence.faceMode === 'attached')
     ).toBe(true)
     expect(
       behavior.sequences
-        .filter(sequence => sequence.group === 'Face Locked Spins')
-        .every(sequence => sequence.gazeProfile === 'orbit')
+        .filter(sequence => sequence.group === 'Animations')
+        .every(sequence => sequence.gazeProfile === 'animation' && sequence.playbackMode === 'once')
     ).toBe(true)
     expect(behavior.sequences.at(-1)).toMatchObject({
       id: 'loading',

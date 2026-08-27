@@ -135,6 +135,11 @@ function mountAvatar(target, options = {}) {
   let bodyAmbientStartedAt = performance.now();
   let gazeStartedAt = performance.now();
   let gazePausedAt = null;
+  let activeGazeProfile = null;
+  let liveGaze = false;
+  let lastRenderedGaze = null;
+  let gazeBlendFrom = null;
+  let gazeBlendStartedAt = -1;
   const faceMotionExpression = { ...initialExpression, headX: 0, headY: 0, headZ: 0 };
   let eyeAmbientSignature = initialExpression.eyeMotion;
   let bodyAmbientSignature = initialExpression.bodyMotion;
@@ -179,10 +184,22 @@ function mountAvatar(target, options = {}) {
     const ambientExpression = currentPose.expression.bodyMotion !== 'none'
       ? AvatarProceduralEngine.applyAmbientBodyMotion(currentPose.expression, bodyElapsed, ambientStrength)
       : currentPose.expression;
-    const gazeProfile = playing || paused ? gazeProfileForAnimation() : null;
-    const gaze = !reducedMotion && gazeProfile
-      ? AvatarProceduralEngine.coordinatedGazeAt(gazeProfile, time - gazeStartedAt)
+    let gaze = !reducedMotion && (playing || paused || liveGaze) && activeGazeProfile
+      ? AvatarProceduralEngine.coordinatedGazeAt(activeGazeProfile, time - gazeStartedAt)
       : null;
+    if (gaze && DATA.animations[currentAnimation]?.group === 'Animations') {
+      gaze = { ...gaze, headBaseWeight: 1 };
+    }
+    if (gaze && gazeBlendFrom) {
+      if (gazeBlendStartedAt < 0) gazeBlendStartedAt = time;
+      const gazeBlendProgress = clamp01((time - gazeBlendStartedAt) / 520);
+      gaze = AvatarProceduralEngine.blendCoordinatedGaze(gazeBlendFrom, gaze, gazeBlendProgress);
+      if (gazeBlendProgress >= 1) {
+        gazeBlendFrom = null;
+        gazeBlendStartedAt = -1;
+      }
+    }
+    lastRenderedGaze = gaze;
     const expression = gaze
       ? AvatarProceduralEngine.applyCoordinatedGaze(ambientExpression, gaze)
       : ambientExpression;
@@ -312,7 +329,7 @@ function mountAvatar(target, options = {}) {
       }
     }
     const ambientActive = AvatarProceduralEngine.hasAmbientMotion(currentPose.expression);
-    const gazeActive = Boolean(gazeProfileForAnimation()) && !reducedMotion && playing;
+    const gazeActive = Boolean(activeGazeProfile) && !reducedMotion && (playing || liveGaze);
     if (faceTransition || transitionState || blinkState || (!ambientActive && !gazeActive && !talking && !thinking) || time - lastAmbientFrame >= 1000 / 30) {
       render(time);
       if (ambientActive || gazeActive || talking || thinking) lastAmbientFrame = time;
@@ -375,7 +392,9 @@ function mountAvatar(target, options = {}) {
     const playbackMode = options.loop === true ? 'loop' : options.loop === false ? 'once' : animation.playbackMode;
     if (playbackMode === 'once' && stepIndex >= last) {
       playing = false;
+      liveGaze = animation.group === 'Animations';
       options.onAnimationEnd?.(currentAnimation);
+      if (liveGaze) requestTick();
       return;
     }
     if (playbackMode === 'pingPong' && last > 0) {
@@ -427,9 +446,22 @@ function mountAvatar(target, options = {}) {
         pausedBlinkDelay = 0;
         return api;
       }
+      const previousGazeProfile = activeGazeProfile;
+      const requestedGazeProfile = DATA.animations[animationName].presentation === 'logo'
+        ? null
+        : (DATA.animations[animationName].gazeProfile || 'attentive');
+      const nextGazeProfile = DATA.animations[animationName].group === 'Animations' && previousGazeProfile
+        ? previousGazeProfile
+        : requestedGazeProfile;
+      if (previousGazeProfile !== nextGazeProfile) {
+        gazeBlendFrom = lastRenderedGaze;
+        gazeBlendStartedAt = -1;
+        gazeStartedAt = performance.now();
+      }
+      activeGazeProfile = nextGazeProfile;
+      liveGaze = false;
       currentAnimation = animationName;
       syncFaceClip();
-      gazeStartedAt = performance.now();
       gazePausedAt = null;
       const animation = DATA.animations[currentAnimation];
       if (animation.presentation === 'logo') api.setFace(false);
@@ -467,6 +499,11 @@ function mountAvatar(target, options = {}) {
       blinkState = null;
       paused = true;
       playing = false;
+      liveGaze = false;
+      activeGazeProfile = null;
+      lastRenderedGaze = null;
+      gazeBlendFrom = null;
+      gazeBlendStartedAt = -1;
       render();
       return api;
     },

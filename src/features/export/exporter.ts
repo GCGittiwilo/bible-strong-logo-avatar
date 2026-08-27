@@ -9,6 +9,7 @@ import { createStoredZip } from './storedZip'
 export type AvatarExportAnimation = Pick<
   AvatarSequence,
   | 'name'
+  | 'group'
   | 'description'
   | 'playbackMode'
   | 'blink'
@@ -81,6 +82,7 @@ export const createAvatarExportPayload = (
         key,
         {
           name: animation.name,
+          group: animation.group,
           description: animation.description,
           ...(animation.presentation ? { presentation: animation.presentation } : {}),
           ...(animation.faceMode ? { faceMode: animation.faceMode } : {}),

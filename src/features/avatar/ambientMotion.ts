@@ -12,12 +12,19 @@ export const gazeProfiles = [
   'celebratory',
   'alert',
   'orbit',
+  'animation',
 ] as const
 export type GazeProfile = (typeof gazeProfiles)[number]
 export type CoordinatedGaze = {
   target: Readonly<{ x: number; y: number }>
   eyeOffset: Readonly<{ x: number; y: number }>
   headOffset: Readonly<{ x: number; y: number; z: number }>
+  /** Rotation inside the eye socket, in degrees. */
+  eyeSocket: Readonly<{ pitch: number; yaw: number }>
+  /** Rotation at the neck, relative to the forward-facing torso. */
+  neckOffset: Readonly<{ pitch: number; yaw: number; roll: number }>
+  /** Small torso/root compensation. It never turns far enough to face away. */
+  bodyOffset: Readonly<{ pitch: number; yaw: number; roll: number }>
   headBaseWeight: number
 }
 const eyeMotionSet = new Set<string>(eyeMotionModes)
@@ -38,7 +45,7 @@ const expressionSeed = (expression: Expression) =>
 const EYE_MOTION_SEED = 17.29
 
 const gazeWaypoints: Record<
-  Exclude<GazeProfile, 'orbit'>,
+  Exclude<GazeProfile, 'orbit' | 'animation'>,
   { intervalMs: number; points: readonly (readonly [number, number])[] }
 > = {
   calm: {
@@ -140,16 +147,11 @@ const gazeTargetAt = (profile: GazeProfile, elapsedMs: number) => {
     const angle = (Math.max(0, elapsedMs) / 3600) * Math.PI * 2 - Math.PI / 2
     return { x: Math.cos(angle) * 0.82, y: Math.sin(angle) * 0.5 }
   }
-  const pattern = gazeWaypoints[profile]
+  const pattern = gazeWaypoints[profile === 'animation' ? 'attentive' : profile]
   return interpolateWaypoint(pattern.points, elapsedMs, pattern.intervalMs)
 }
 
-const headFollow = (value: number, threshold = 0.26) => {
-  const magnitude = Math.abs(value)
-  if (magnitude <= threshold) return 0
-  const active = (magnitude - threshold) / (1 - threshold)
-  return Math.sign(value) * active * active
-}
+const clampDegrees = (value: number, limit: number) => Math.max(-limit, Math.min(limit, value))
 
 export const coordinatedGazeAt = (
   profile: GazeProfile,
@@ -157,20 +159,39 @@ export const coordinatedGazeAt = (
   strength = 1
 ): CoordinatedGaze => {
   const eyeTarget = gazeTargetAt(profile, elapsedMs)
-  // The eyes acquire a target first. The head follows the same target shortly afterward,
-  // and only once the glance travels beyond a comfortable eye-only range.
+  // The eyes acquire a target first. After that short lead, the same target is resolved
+  // through three anatomical limits: eye socket -> neck -> forward-facing torso.
   const headTarget = elapsedMs <= 190 ? { x: 0, y: 0 } : gazeTargetAt(profile, elapsedMs - 190)
-  const followX = headFollow(headTarget.x)
-  const followY = headFollow(headTarget.y, 0.22)
+  const targetYaw = headTarget.x * 58 * strength
+  const targetPitch = -headTarget.y * 42 * strength
+  const initialEyeYaw = clampDegrees(targetYaw, 18)
+  const initialEyePitch = clampDegrees(targetPitch, 13)
+  const desiredHeadYaw = targetYaw - initialEyeYaw
+  const desiredHeadPitch = targetPitch - initialEyePitch
+  const neckYaw = clampDegrees(desiredHeadYaw, 36)
+  const neckPitch = clampDegrees(desiredHeadPitch, 24)
+  const bodyYaw = clampDegrees(desiredHeadYaw - neckYaw, 10)
+  const bodyPitch = clampDegrees(desiredHeadPitch - neckPitch, 6)
+  const visibleHeadYaw = neckYaw + bodyYaw
+  const visibleHeadPitch = neckPitch + bodyPitch
+  const eyeYaw = clampDegrees(targetYaw - visibleHeadYaw, 18)
+  const eyePitch = clampDegrees(targetPitch - visibleHeadPitch, 13)
+  const roll = clampDegrees(-visibleHeadYaw * 0.08, 4)
   return {
     target: { x: eyeTarget.x * strength, y: eyeTarget.y * strength },
-    eyeOffset: { x: eyeTarget.x * 14 * strength, y: eyeTarget.y * 9 * strength },
-    headOffset: {
-      x: -followY * 17 * strength,
-      y: followX * 24 * strength,
-      z: -followX * 3.2 * strength,
+    eyeOffset: {
+      x: (eyeYaw / 18) * 14,
+      y: (eyePitch / 13) * 9,
     },
-    headBaseWeight: profile === 'orbit' ? 1 : 0.18,
+    headOffset: {
+      x: visibleHeadPitch,
+      y: visibleHeadYaw,
+      z: roll,
+    },
+    eyeSocket: { pitch: eyePitch, yaw: eyeYaw },
+    neckOffset: { pitch: neckPitch, yaw: neckYaw, roll },
+    bodyOffset: { pitch: bodyPitch, yaw: bodyYaw, roll: 0 },
+    headBaseWeight: profile === 'orbit' || profile === 'animation' ? 1 : 0.18,
   }
 }
 
@@ -183,6 +204,46 @@ export const applyCoordinatedGaze = (
   headY: expression.headY * gaze.headBaseWeight + gaze.headOffset.y,
   headZ: expression.headZ * gaze.headBaseWeight + gaze.headOffset.z,
 })
+
+const mix = (from: number, to: number, progress: number) => from + (to - from) * progress
+
+export const blendCoordinatedGaze = (
+  from: CoordinatedGaze,
+  to: CoordinatedGaze,
+  progress: number
+): CoordinatedGaze => {
+  const eased = smoothstep(Math.max(0, Math.min(1, progress)))
+  return {
+    target: {
+      x: mix(from.target.x, to.target.x, eased),
+      y: mix(from.target.y, to.target.y, eased),
+    },
+    eyeOffset: {
+      x: mix(from.eyeOffset.x, to.eyeOffset.x, eased),
+      y: mix(from.eyeOffset.y, to.eyeOffset.y, eased),
+    },
+    headOffset: {
+      x: mix(from.headOffset.x, to.headOffset.x, eased),
+      y: mix(from.headOffset.y, to.headOffset.y, eased),
+      z: mix(from.headOffset.z, to.headOffset.z, eased),
+    },
+    eyeSocket: {
+      pitch: mix(from.eyeSocket.pitch, to.eyeSocket.pitch, eased),
+      yaw: mix(from.eyeSocket.yaw, to.eyeSocket.yaw, eased),
+    },
+    neckOffset: {
+      pitch: mix(from.neckOffset.pitch, to.neckOffset.pitch, eased),
+      yaw: mix(from.neckOffset.yaw, to.neckOffset.yaw, eased),
+      roll: mix(from.neckOffset.roll, to.neckOffset.roll, eased),
+    },
+    bodyOffset: {
+      pitch: mix(from.bodyOffset.pitch, to.bodyOffset.pitch, eased),
+      yaw: mix(from.bodyOffset.yaw, to.bodyOffset.yaw, eased),
+      roll: mix(from.bodyOffset.roll, to.bodyOffset.roll, eased),
+    },
+    headBaseWeight: mix(from.headBaseWeight, to.headBaseWeight, eased),
+  }
+}
 
 const smoothNoise = (elapsedMs: number, axis: number, seed: number, interval: number) => {
   const progress = elapsedMs / interval

@@ -46,8 +46,10 @@ import {
   ambientEyeOffset,
   applyCoordinatedGaze,
   applyAmbientBodyMotion,
+  blendCoordinatedGaze,
   coordinatedGazeAt,
   hasAmbientMotion,
+  type CoordinatedGaze,
   type GazeProfile,
 } from '@/features/avatar/ambientMotion'
 import {
@@ -332,6 +334,9 @@ export function useStudioController() {
   const lastAmbientStrength = useRef(1)
   const gazeStartedAt = useRef(-1)
   const lastGazeElapsed = useRef(0)
+  const lastRenderedGaze = useRef<CoordinatedGaze | null>(null)
+  const gazeBlendFrom = useRef<CoordinatedGaze | null>(null)
+  const gazeBlendStartedAt = useRef(-1)
   const transitionTarget = useRef<Expression>({ ...initialExpression })
   const canonicalTarget = useRef<Expression>({ ...initialExpression })
   const retargetFrom = useRef<Expression | null>(null)
@@ -419,9 +424,23 @@ export function useStudioController() {
       if (gazeStartedAt.current < 0) gazeStartedAt.current = frameTimeMs - lastGazeElapsed.current
       lastGazeElapsed.current = frameTimeMs - gazeStartedAt.current
     }
-    const gaze = gazeProfile
+    const rawGaze = gazeProfile
       ? coordinatedGazeAt(gazeProfile, lastGazeElapsed.current, reduceMotion ? 0 : 1)
       : null
+    let gaze = rawGaze
+    if (gaze && activeSequenceRef.current?.group === 'Animations') {
+      gaze = { ...gaze, headBaseWeight: 1 }
+    }
+    if (gaze && gazeBlendFrom.current && frameTimeMs !== undefined) {
+      if (gazeBlendStartedAt.current < 0) gazeBlendStartedAt.current = frameTimeMs
+      const progress = Math.min((frameTimeMs - gazeBlendStartedAt.current) / 520, 1)
+      gaze = blendCoordinatedGaze(gazeBlendFrom.current, gaze, progress)
+      if (progress >= 1) {
+        gazeBlendFrom.current = null
+        gazeBlendStartedAt.current = -1
+      }
+    }
+    lastRenderedGaze.current = gaze
     const ambientExpression = bodyAmbientEnabled
       ? applyAmbientBodyMotion(
           pose.expression,
@@ -494,8 +513,7 @@ export function useStudioController() {
 
   const ambientLoopActive =
     !reduceMotion &&
-    (hasAmbientMotion(editing?.draft ?? expression) ||
-      (statePlaying && activeGazeProfileRef.current !== null))
+    (hasAmbientMotion(editing?.draft ?? expression) || activeGazeProfileRef.current !== null)
   useEffect(() => {
     if (!ambientLoopActive) return
     const tick = (time: number) => {
@@ -1147,6 +1165,9 @@ export function useStudioController() {
     blinkAnimating.current = false
     blinkValue.jump(1)
     activeGazeProfileRef.current = null
+    lastRenderedGaze.current = null
+    gazeBlendFrom.current = null
+    gazeBlendStartedAt.current = -1
     gazeStartedAt.current = -1
     lastGazeElapsed.current = 0
     const avatar = avatarsRef.current.find(item => item.id === activeAvatarIdRef.current)
@@ -1166,19 +1187,29 @@ export function useStudioController() {
     }
     const playbackAvatar =
       avatarsRef.current.find(item => item.id === activeAvatarIdRef.current) ?? activeAvatar
-    activeGazeProfileRef.current = resolveSequenceGazeProfile(sequence)
-    gazeStartedAt.current = -1
-    if (!resume) lastGazeElapsed.current = 0
+    const previousGazeProfile = activeGazeProfileRef.current
+    const requestedGazeProfile = resolveSequenceGazeProfile(sequence)
+    const nextGazeProfile =
+      sequence.group === 'Animations' && previousGazeProfile
+        ? previousGazeProfile
+        : requestedGazeProfile
+    if (!resume && previousGazeProfile !== nextGazeProfile) {
+      gazeBlendFrom.current = lastRenderedGaze.current
+      gazeBlendStartedAt.current = -1
+      gazeStartedAt.current = -1
+      lastGazeElapsed.current = 0
+    }
+    activeGazeProfileRef.current = nextGazeProfile
     setTalking(false)
     setThinking(false)
     if (playbackAvatar.logoMorph) setLogoFace(sequence.presentation !== 'logo')
     updateActiveFaceForward(resolveSequenceFaceForward(playbackAvatar.faceForward, sequence))
+    activeSequenceRef.current = sequence
     paintPose(displayedPose.current)
     const id = sequence.id
     playbackTimeline.current = beginPlayback(playbackTimeline.current, resume)
     setSelectedState(id)
     setActiveState(id)
-    activeSequenceRef.current = sequence
     setStatePlaying(true)
     setPlaybackStatus('playing')
     if (persist) persistStatePlayback({ stateId: id, playing: true })
@@ -1215,10 +1246,13 @@ export function useStudioController() {
         if (blinkTimer.current) clearTimeout(blinkTimer.current)
         blinkTimer.current = null
         playbackTimeline.current = { ...playbackTimeline.current, blinkDueAt: null }
-        activeGazeProfileRef.current = null
-        gazeStartedAt.current = -1
-        lastGazeElapsed.current = 0
-        updateActiveFaceForward(Boolean(playbackAvatar.faceForward))
+        const retainLiveGaze = sequence.group === 'Animations'
+        if (!retainLiveGaze) {
+          activeGazeProfileRef.current = null
+          gazeStartedAt.current = -1
+          lastGazeElapsed.current = 0
+          updateActiveFaceForward(Boolean(playbackAvatar.faceForward))
+        }
         paintPose(displayedPose.current)
         setStatePlaying(false)
         setPlaybackStatus('stopped')

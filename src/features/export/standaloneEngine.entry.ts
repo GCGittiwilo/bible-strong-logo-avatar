@@ -4,6 +4,7 @@ export {
   ambientEyeOffset,
   applyAmbientBodyMotion,
   applyAmbientMotion,
+  blendCoordinatedGaze,
   applyCoordinatedGaze,
   coordinatedGazeAt,
   hasAmbientMotion,

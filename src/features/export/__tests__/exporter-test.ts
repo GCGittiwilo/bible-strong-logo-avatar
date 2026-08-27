@@ -40,7 +40,7 @@ describe('avatar export', () => {
     expect(payload.avatar.mouth?.style).toBe('comic')
     expect(payload.animations.listening.effect).toBe('listening')
     expect(payload.animations.listening.presentation).toBe('face')
-    expect(payload.animations.listening.faceMode).toBe('locked')
+    expect(payload.animations.listening.faceMode).toBe('attached')
     expect(payload.animations.listening.gazeProfile).toBe('attentive')
   })
 

@@ -117,7 +117,10 @@ describe('editable avatar sequences', () => {
     expect(sequences.find(sequence => sequence.id === 'thinking')?.gazeProfile).toBe('reflective')
     expect(sequences.find(sequence => sequence.id === 'searching')?.gazeProfile).toBe('scanning')
     expect(sequences.every(sequence => resolveSequenceGazeProfile(sequence) !== null)).toBe(true)
-    expect(new Set(sequences.map(sequence => sequence.group))).toEqual(new Set(['Chat Pipeline']))
+    expect(sequences.every(sequence => sequence.faceMode === 'attached')).toBe(true)
+    expect(new Set(sequences.map(sequence => sequence.group))).toEqual(
+      new Set(['Eye + Head Movement'])
+    )
   })
 
   it('lets each animation choose whether the face stays locked or follows the body', () => {

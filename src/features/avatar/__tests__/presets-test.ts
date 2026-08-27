@@ -1,6 +1,21 @@
-import { getStatePlaybackConfig } from '@/features/avatar/presets'
+import { getStatePlaybackConfig, initialExpressions } from '@/features/avatar/presets'
 
 describe('state playback configuration', () => {
+  it('keeps expression presets limited to eye shape rather than movement', () => {
+    expect(
+      initialExpressions.every(
+        expression =>
+          expression.headX === 0 &&
+          expression.headY === 0 &&
+          expression.headZ === 0 &&
+          expression.positionXLeft === 0 &&
+          expression.positionXRight === 0 &&
+          expression.positionYLeft === 0 &&
+          expression.positionYRight === 0
+      )
+    ).toBe(true)
+  })
+
   it('keeps ready slower than an active sequence', () => {
     expect(getStatePlaybackConfig('ready').expressionIntervalMs).toBe(5200)
     expect(getStatePlaybackConfig('listening').expressionIntervalMs).toBe(2300)

@@ -128,6 +128,18 @@ describe('perpetual expression motion', () => {
     expect(Math.sign(animated.headY)).toBe(Math.sign(followedGaze.target.x))
   })
 
+  it('resolves large looks through socket, neck, and forward-facing body limits', () => {
+    const gaze = coordinatedGazeAt('scanning', 1700)
+
+    expect(Math.abs(gaze.eyeSocket.yaw)).toBeLessThanOrEqual(18)
+    expect(Math.abs(gaze.eyeSocket.pitch)).toBeLessThanOrEqual(13)
+    expect(Math.abs(gaze.neckOffset.yaw)).toBeLessThanOrEqual(36)
+    expect(Math.abs(gaze.neckOffset.pitch)).toBeLessThanOrEqual(24)
+    expect(Math.abs(gaze.bodyOffset.yaw)).toBeLessThanOrEqual(10)
+    expect(Math.abs(gaze.bodyOffset.pitch)).toBeLessThanOrEqual(6)
+    expect(Math.sign(gaze.eyeSocket.yaw)).toBe(Math.sign(gaze.neckOffset.yaw))
+  })
+
   it('makes chat gaze lead the head instead of preserving unrelated expression rotation', () => {
     const expression = { ...defaultExpression, headX: 30, headY: -40, headZ: 20 }
     const gaze = coordinatedGazeAt('attentive', 0)

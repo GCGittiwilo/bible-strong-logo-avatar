@@ -114,7 +114,7 @@ export const createInitialSequences = (): AvatarSequence[] =>
           stateNotes[id] ?? 'Cette animation enchaîne un pool de presets et des clignements.',
         builtIn: true,
         presentation: 'face',
-        faceMode: 'locked',
+        faceMode: 'attached',
         gazeProfile: stateGazeProfiles[id] ?? 'attentive',
         ...((stateEffects as Partial<Record<string, SequenceEffect>>)[id]
           ? { effect: (stateEffects as Partial<Record<string, SequenceEffect>>)[id] }
@@ -294,7 +294,7 @@ export const createSequence = (expressionId = initialExpressions[0].id): AvatarS
   description: '',
   builtIn: false,
   presentation: 'face',
-  faceMode: 'locked',
+  faceMode: 'attached',
   gazeProfile: 'attentive',
   playbackMode: 'loop',
   steps: [

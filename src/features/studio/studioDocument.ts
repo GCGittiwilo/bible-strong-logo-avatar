@@ -12,6 +12,7 @@ import {
   type AvatarSequence,
 } from '../animation/sequences'
 import defaultStudioDocument from './defaultStudioDocument.json'
+import { initialExpressions } from '../avatar/presets'
 
 export type StatePlaybackSelection = { stateId: string | null; playing: boolean }
 
@@ -101,13 +102,30 @@ const createBundledStudioDocument = () => {
   const snapshot = JSON.parse(JSON.stringify(defaultStudioDocument)) as StudioDocument
   const logo = snapshot.library.avatars.find(avatar => avatar.id === 'avatar-bible-strong-logo')
   if (logo) {
-    logo.behaviorRevision = 2
+    logo.behaviorRevision = 4
     snapshot.library = {
       activeAvatarId: logo.id,
-      bundledAvatarRevision: 2,
+      bundledAvatarRevision: 4,
       avatars: [logo],
     }
   }
+  const calibratedIds = new Set(initialExpressions.map(expression => expression.id))
+  const additionalExpressions = snapshot.expressions
+    .filter(expression => !calibratedIds.has(expression.id))
+    .map(expression => ({
+      ...expression,
+      headX: 0,
+      headY: 0,
+      headZ: 0,
+      positionXLeft: 0,
+      positionXRight: 0,
+      positionYLeft: 0,
+      positionYRight: 0,
+    }))
+  snapshot.expressions = [
+    ...initialExpressions.map(expression => ({ ...expression })),
+    ...additionalExpressions,
+  ]
   snapshot.sequences = createInitialSequences()
   snapshot.playback = { stateId: 'ready', playing: true }
   return parseStudioDocument(snapshot, snapshot)

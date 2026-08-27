@@ -46,9 +46,11 @@ export const initialExpressions: Expression[] = calibrated.map(
     index
   ) => ({
     id: `expression-${String(index).padStart(2, '0')}`,
-    headX,
-    headY,
-    headZ,
+    // Expressions describe eye shape only. Gaze and head/body movement are layered
+    // independently by the movement engine.
+    headX: 0,
+    headY: 0,
+    headZ: 0,
     widthLeft,
     widthRight,
     heightLeft,
@@ -56,8 +58,8 @@ export const initialExpressions: Expression[] = calibrated.map(
     spacing,
     positionXLeft: 0,
     positionXRight: 0,
-    positionYLeft: latitude,
-    positionYRight: latitude,
+    positionYLeft: 0,
+    positionYRight: 0,
     leftAngle,
     rightAngle,
     perspective: 1,
@@ -88,7 +90,7 @@ export const defaultExpression: Expression = {
 }
 
 export const stateGroups = {
-  'Chat Pipeline': [
+  'Eye + Head Movement': [
     'ready',
     'listening',
     'transcribing',
